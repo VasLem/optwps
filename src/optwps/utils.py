@@ -76,6 +76,16 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
             return pgzip.open(
                 fil, mode + "t" if not mode.endswith("b") else mode, *args, **kwargs
             )
+        except AttributeError:
+            # pgzip is not supported in python 3.12 and after
+            import gzip
+
+            try:
+                return gzip.open(
+                    fil, mode + "t" if not mode.endswith("b") else mode, *args, **kwargs
+                )
+            except BaseException:
+                return pgzip.open(fil, mode + "t" if not mode.endswith("b") else mode)
         except BaseException:
             return pgzip.open(fil, mode + "t" if not mode.endswith("b") else mode)
     return _open(fil, mode, *args, **kwargs)

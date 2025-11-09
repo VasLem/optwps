@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
+dynamic = ["version"]
 name = "optwps"
-version = "0.1.0"
 description = "Fast Window Protection Score calculator for cell-free DNA analysis"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -68,6 +68,11 @@ Repository = "https://github.com/VasLem/optwps"
 [project.scripts]
 optwps = "optwps:main"
 
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -77,28 +82,6 @@ addopts = [
     "--verbose",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--cov-report=xml",
-]
-
-[tool.coverage.run]
-source = ["src", "lib"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
-    "*/site-packages/*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
 ]
 
 [tool.black]
