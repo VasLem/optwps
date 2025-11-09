@@ -41,13 +41,13 @@ pip install -r requirements.txt
 Basic usage:
 
 ```bash
-python bin/make_wps.py -i input.bam -o output.tsv
+optwps -i input.bam -o output.tsv
 ```
 
 With custom parameters:
 
 ```bash
-python bin/make_wps.py \
+optwps \
     -i input.bam \
     -o output.tsv \
     -w 120 \
@@ -59,12 +59,15 @@ python bin/make_wps.py \
 ### Command Line Arguments
 
 - `-i, --input`: Input BAM file (required)
-- `-o, --outfile`: Output file path (required)
-- `-w, --protection`: Base pair protection size assumed for elements (default: 120)
-- `--min_insert_size`: Minimum insert size threshold to consider (optional)
-- `--max_insert_size`: Maximum insert size threshold to consider (optional)
-- `--downsample`: Ratio to downsample reads (0.0-1.0, optional)
-- `-v, --verbose`: Enable debug output
+- `-o, --outfile`: Output file path for WPS results. If not provided, results will be printed to stdout (optional)
+- `-r, --regions`: BED file with regions of interest (default: whole genome, optional)
+- `-w, --protection`: Base pair protection window (default: 120)
+- `--min-insert-size`: Minimum read length threshold to consider (optional)
+- `--max-insert-size`: Maximum read length threshold to consider (optional)
+- `--downsample`: Ratio to downsample reads (default OFF, optional)
+- `--chunk-size`: Chunk size for processing in pieces (default: 1e6)
+- `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
+- `--verbose-output`: If provided, output will include separate counts for 'outside' and 'inside' along with WPS
 
 ### Python API
 
@@ -94,8 +97,8 @@ The output is a tab-separated file with the following columns:
 1. **chromosome**: Chromosome name
 2. **start**: Start position (0-based)
 3. **end**: End position (1-based)
-4. **outside**: Count of fragments fully spanning the protection window
-5. **inside**: Count of fragment endpoints falling inside the protection window
+4. **outside**: Count of fragments fully spanning the protection window (if `--verbose-output`)
+5. **inside**: Count of fragment endpoints falling inside the protection window (if `--verbose-output`)
 6. **wps**: Window Protection Score (outside - inside)
 
 Example output:
@@ -127,13 +130,13 @@ The Windowed Protection Score [![DOI](https://img.shields.io/badge/DOI-110.1016%
 ### Example 1: Basic WPS Calculation
 
 ```bash
-python bin/make_wps.py -i sample.bam -o sample_wps.tsv
+optwps -i sample.bam -o sample_wps.tsv
 ```
 
 ### Example 2: Providing a regions bed file, limiting the range of the size of the inserts considered, and printing to the terminal
 
 ```bash
-python bin/make_wps.py \
+optwps \
     -i sample.bam \
     -r regions.tsv \
     --min_insert_size 120 \
@@ -143,7 +146,7 @@ python bin/make_wps.py \
 ### Example 3: Specific Regions with Downsampling
 
 ```bash
-python bin/make_wps.py \
+optwps \
     -i high_coverage.bam \
     -o regions_wps.tsv \
     -r regions_of_interest.bed \
