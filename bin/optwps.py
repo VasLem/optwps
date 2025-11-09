@@ -67,8 +67,8 @@ def main():
     parser.add_argument(
         "--chunk-size",
         dest="chunk_size",
-        help="Chunk size for processing in pieces (default 1e6)",
-        default=1e6,
+        help="Chunk size for processing in pieces, in case of low memory (default 1e8)",
+        default=1e8,
         type=int,
     )
     parser.add_argument(
