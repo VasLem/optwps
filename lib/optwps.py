@@ -51,10 +51,10 @@ class ROIGenerator:
         bed_file (str, optional): Path to BED file containing regions to process.
             If None, the entire genome will be processed. Default: None
         chunk_size (int, optional): Size of chunks in base pairs for processing.
-            Default: 1e6 (1 megabase)
+            Default: 1e8 (100 megabases)
     """
 
-    def __init__(self, bed_file=None, chunk_size=1e6):
+    def __init__(self, bed_file=None, chunk_size=1e8):
         self.bed_file = bed_file
         self.chunk_size = chunk_size
 
@@ -131,7 +131,7 @@ class WPS:
         valid_chroms (set, optional): Set of valid chromosome names to process.
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
-            Default: 1e6 (1 Mb)
+            Default: 1e8 (100 Mb)
 
     Attributes:
         bed_file (str): Path to BED file or None
@@ -159,7 +159,7 @@ class WPS:
         min_insert_size=None,
         max_insert_size=None,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
-        chunk_size=1e6,
+        chunk_size=1e8,
     ):
         self.bed_file = bed_file
         self.protection_size = protection_size // 2
