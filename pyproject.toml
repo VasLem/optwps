@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-dynamic = ["version"]
 name = "optwps"
+version = "0.1.0"
 description = "Fast Window Protection Score calculator for cell-free DNA analysis"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -67,11 +67,6 @@ Repository = "https://github.com/VasLem/optwps"
 
 [project.scripts]
 optwps = "optwps:main"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
