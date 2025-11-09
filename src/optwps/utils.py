@@ -85,13 +85,13 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
                 try:
                     return gzip.open(
                         fil,
-                        mode + "t" if not mode.endswith("b") else mode,
+                        mode + "b" if not mode.endswith("b") else mode,
                         *args,
                         **kwargs,
                     )
                 except BaseException:
                     return gzip.open(
-                        fil, mode + "t" if not mode.endswith("b") else mode
+                        fil, mode + "b" if not mode.endswith("b") else mode
                     )
 
     return _open(fil, mode, *args, **kwargs)
