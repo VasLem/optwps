@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "BSD 3"}
 authors = [
-    {name = "JorisVermeeschLab"},
+    {name = "Vasileios Lemonidis"},
 ]
 maintainers = [
-    {name = "JorisVermeeschLab"},
+    {name = "Vasileios Lemonidis"},
 ]
 keywords = [
     "bioinformatics",
@@ -61,13 +61,12 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/JorisVermeeschLab/docker"
-Documentation = "https://github.com/JorisVermeeschLab/docker/blob/main/wps/README.md"
-Repository = "https://github.com/JorisVermeeschLab/docker"
-"Bug Tracker" = "https://github.com/JorisVermeeschLab/docker/issues"
+Documentation = "https://github.com/VasLem/optwps/README.md"
+Repository = "https://github.com/VasLem/optwps"
+"Bug Tracker" = "https://github.com/VasLem/optwps/issues"
 
 [project.scripts]
-fast_wps = "bin.make_wps:main"
+optwps = "bin.optwps:main"
 
 [tool.setuptools]
 packages = ["lib", "bin"]

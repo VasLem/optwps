@@ -1,10 +1,10 @@
-# fast_wps
+# optwps
 
 A high-performance Python package for computing Window Protection Score (WPS) from BAM files, designed for cell-free DNA (cfDNA) analysis.
 
 ## Overview
 
-`fast_wps` is a fast and efficient tool for calculating Window Protection Scores from aligned sequencing reads. WPS is a metric used in cell-free DNA analysis to identify nucleosome positioning and protected regions by analyzing fragment coverage patterns.
+`optwps` is a fast and efficient tool for calculating Window Protection Scores from aligned sequencing reads. WPS is a metric used in cell-free DNA analysis to identify nucleosome positioning and protected regions by analyzing fragment coverage patterns.
 
 ## Features
 
@@ -51,8 +51,8 @@ python bin/make_wps.py \
     -i input.bam \
     -o output.tsv \
     -w 120 \
-    --minInsert 120 \
-    --maxInsert 180 \
+    --min_insert_size 120 \
+    --max_insert_size 180 \
     --downsample 0.5
 ```
 
@@ -61,15 +61,15 @@ python bin/make_wps.py \
 - `-i, --input`: Input BAM file (required)
 - `-o, --outfile`: Output file path (required)
 - `-w, --protection`: Base pair protection size assumed for elements (default: 120)
-- `--minInsert`: Minimum insert size threshold to consider (optional)
-- `--maxInsert`: Maximum insert size threshold to consider (optional)
+- `--min_insert_size`: Minimum insert size threshold to consider (optional)
+- `--max_insert_size`: Maximum insert size threshold to consider (optional)
 - `--downsample`: Ratio to downsample reads (0.0-1.0, optional)
 - `-v, --verbose`: Enable debug output
 
 ### Python API
 
 ```python
-from lib.fast_wps import WPS
+from lib.optwps import WPS
 
 # Initialize WPS calculator
 wps_calculator = WPS(
@@ -90,7 +90,7 @@ wps_calculator.run(
 ### Using BED Files for Specific Regions
 
 ```python
-from lib.fast_wps import WPS
+from lib.optwps import WPS
 
 # Process only specific regions
 wps_calculator = WPS(
@@ -169,8 +169,8 @@ python bin/make_wps.py -i sample.bam -o sample_wps.tsv
 python bin/make_wps.py \
     -i sample.bam \
     -o nucleosome_wps.tsv \
-    --minInsert 120 \
-    --maxInsert 180
+    --min_insert_size 120 \
+    --max_insert_size 180
 ```
 
 ### Example 3: Specific Regions with Downsampling
@@ -199,7 +199,7 @@ pytest tests/ -v
 
 ## Citation
 
-If you use `fast_wps` in your research, please cite:
+If you use `optwps` in your research, please cite:
 
 [Add citation information here]
 
@@ -223,7 +223,7 @@ This tool implements the Window Protection Score algorithm as described in the c
 
 ### Common Issues
 
-**Issue**: "No module named 'lib.fast_wps'"
+**Issue**: "No module named 'lib.optwps'"
 - **Solution**: Make sure you're running from the project root directory or install the package
 
 **Issue**: Slow processing for large BAM files

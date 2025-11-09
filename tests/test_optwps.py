@@ -6,7 +6,7 @@ from pytest import fixture
 import pysam
 
 
-from lib.utils import exopen, isSoftClipped, ref_aln_length
+from lib.utils import exopen, is_soft_clipped, ref_aln_length
 from collections import defaultdict
 from bx.intervals import Intersecter, Interval
 
@@ -145,8 +145,8 @@ def old_implementation(
     out_filepath,
     protection_size,
     valid_chroms,
-    minInsSize,
-    maxInsSize,
+    min_insert_size,
+    max_insert_size,
 ):
     protection = protection_size // 2
     with exopen(bed_file, "r") as infile:
@@ -176,7 +176,7 @@ def old_implementation(
             ):
                 if read.is_duplicate or read.is_qcfail or read.is_unmapped:
                     continue
-                if isSoftClipped(read.cigar):
+                if is_soft_clipped(read.cigar):
                     continue
 
                 if read.is_paired:
@@ -193,8 +193,8 @@ def old_implementation(
                         rstart = min(read.pos, read.pnext) + 1  # 1-based
                         lseq = abs(read.isize)
                         rend = rstart + lseq - 1  # end included
-                        if minInsSize != None and (
-                            (lseq < minInsSize) or (lseq > maxInsSize)
+                        if min_insert_size != None and (
+                            (lseq < min_insert_size) or (lseq > max_insert_size)
                         ):
                             continue
 
@@ -203,8 +203,8 @@ def old_implementation(
                     rstart = read.pos + 1  # 1-based
                     lseq = ref_aln_length(read.cigar)
                     rend = rstart + lseq - 1  # end included
-                    if minInsSize != None and (
-                        (lseq < minInsSize) or (lseq > maxInsSize)
+                    if min_insert_size != None and (
+                        (lseq < min_insert_size) or (lseq > max_insert_size)
                     ):
                         continue
 
@@ -230,10 +230,10 @@ def old_implementation(
                 out.close()
 
 
-def test_fast_wps_does_the_same_as_old_version_paired_end(
+def test_optwps_does_the_same_as_old_version_paired_end(
     make_test_bed_file, make_test_bam_file_paired, tmp_path
 ):
-    from lib.fast_wps import WPS
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -254,8 +254,8 @@ def test_fast_wps_does_the_same_as_old_version_paired_end(
         out_filepath=tmp_old_output,
         protection_size=120,
         valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
-        minInsSize=None,
-        maxInsSize=None,
+        min_insert_size=None,
+        max_insert_size=None,
     )
     new_lines = open(tmp_new_output).readlines()
     old_lines = open(tmp_old_output).readlines()
@@ -267,10 +267,10 @@ def test_fast_wps_does_the_same_as_old_version_paired_end(
             )
 
 
-def test_fast_wps_does_the_same_as_old_version_single_end(
+def test_optwps_does_the_same_as_old_version_single_end(
     make_test_bed_file, make_test_bam_file_single, tmp_path
 ):
-    from lib.fast_wps import WPS
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -291,8 +291,8 @@ def test_fast_wps_does_the_same_as_old_version_single_end(
         out_filepath=tmp_old_output,
         protection_size=120,
         valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
-        minInsSize=None,
-        maxInsSize=None,
+        min_insert_size=None,
+        max_insert_size=None,
     )
     new_lines = open(tmp_new_output).readlines()
     old_lines = open(tmp_old_output).readlines()
@@ -304,10 +304,10 @@ def test_fast_wps_does_the_same_as_old_version_single_end(
             )
 
 
-def test_fast_wps_downsampling(
+def test_optwps_downsampling(
     make_test_bed_file, make_test_bam_file_paired, make_test_bam_file_single, tmp_path
 ):
-    from lib.fast_wps import WPS
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -332,8 +332,8 @@ def test_fast_wps_downsampling(
     assert len(lines) > 0  # Just check that some output is produced
 
 
-def test_fast_wps_no_bed_file(make_test_bam_file_paired, tmp_path):
-    from lib.fast_wps import WPS
+def test_optwps_no_bed_file(make_test_bam_file_paired, tmp_path):
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=None,
@@ -359,7 +359,7 @@ def test_gzbedfile_handling(make_test_bed_file, make_test_bam_file_paired, tmp_p
     with open(make_test_bed_file, "rb") as f_in:
         with gzip.open(gz_bed_path, "wb") as f_out:
             f_out.writelines(f_in)
-    from lib.fast_wps import WPS
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=str(gz_bed_path),
@@ -377,7 +377,7 @@ def test_gzbedfile_handling(make_test_bed_file, make_test_bam_file_paired, tmp_p
 def test_with_minsize_maxsize(
     make_test_bed_file, make_test_bam_file_paired, make_test_bam_file_single, tmp_path
 ):
-    from lib.fast_wps import WPS
+    from lib.optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),

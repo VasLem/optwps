@@ -1,5 +1,5 @@
 """
-Utility functions for fast_wps package.
+Utility functions for optwps package.
 
 This module provides helper functions for BAM file processing and file I/O operations.
 """
@@ -7,10 +7,12 @@ This module provides helper functions for BAM file processing and file I/O opera
 _open = open
 
 import os
+import sys
 import pgzip
+from contextlib import nullcontext
 
 
-def isSoftClipped(cigar):
+def is_soft_clipped(cigar):
     """
     Check if a read has soft clipping in its CIGAR string.
 
@@ -23,14 +25,6 @@ def isSoftClipped(cigar):
 
     Returns:
         bool: True if any soft clipping operation is present, False otherwise
-
-    Example:
-        >>> cigar = [(0, 50), (4, 10)]  # 50M10S
-        >>> isSoftClipped(cigar)
-        True
-        >>> cigar = [(0, 60)]  # 60M
-        >>> isSoftClipped(cigar)
-        False
     """
     return any(op == 4 for op, _ in cigar)
 
@@ -48,19 +42,6 @@ def ref_aln_length(cigar):
 
     Returns:
         int: Total length on reference sequence
-
-    Example:
-        >>> cigar = [(0, 50), (2, 5), (0, 45)]  # 50M5D45M
-        >>> ref_aln_length(cigar)
-        100
-
-    Note:
-        Operations included:
-            - 0 (M): alignment match/mismatch
-            - 2 (D): deletion from reference
-            - 3 (N): skipped region from reference
-            - 7 (=): sequence match
-            - 8 (X): sequence mismatch
     """
     return sum(l for op, l in cigar if op in (0, 2, 3, 7, 8))
 
@@ -71,7 +52,7 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
 
     This function wraps the standard open() function with automatic detection
     and handling of gzipped files using parallel compression (pgzip) for better
-    performance on multi-core systems.
+    performance on multi-core systems. Also supports writing to stdout.
 
     Args:
         fil (str): Path to the file to open
@@ -83,30 +64,13 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
         **kwargs: Additional keyword arguments passed to open function
 
     Returns:
-        file object: Opened file handle (either standard or pgzip)
-
-    Example:
-        >>> # Reading a gzipped file
-        >>> with exopen('data.txt.gz', 'r') as f:
-        ...     content = f.read()
-
-        >>> # Writing to a gzipped file with parallel compression
-        >>> with exopen('output.txt.gz', 'w') as f:
-        ...     f.write('Hello, world!')
-
-        >>> # Regular file (no gzip)
-        >>> with exopen('data.txt', 'r') as f:
-        ...     content = f.read()
-
-    Note:
-        - Automatically detects gzipped files by .gz extension
-        - Uses pgzip for parallel compression/decompression
-        - Falls back to standard open() for non-gzipped files
-        - Handles text and binary modes appropriately
+        file object: Opened file handle (either stdout, standard or pgzip)
     """
-
     if njobs == -1:
         njobs = os.cpu_count()
+    if fil == "stdout":
+        assert "r" not in mode, "Cannot open stdout in read mode"
+        return nullcontext(sys.stdout)
     if fil.endswith(".gz"):
         try:
             return pgzip.open(

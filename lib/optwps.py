@@ -5,10 +5,6 @@ Fast Window Protection Score (WPS) Calculator for Cell-Free DNA Analysis.
 This module provides efficient computation of Window Protection Scores from BAM files,
 designed for analyzing cell-free DNA fragmentation patterns and nucleosome positioning.
 
-Classes:
-    ROIGenerator: Generates regions of interest from BED files or entire genomes
-    WPS: Main class for Window Protection Score calculation
-
 The WPS algorithm identifies protected genomic regions by analyzing DNA fragment
 coverage patterns. It counts fragments that span versus fragments whose endpoints
 fall within a protection window around each genomic position.
@@ -16,8 +12,8 @@ fall within a protection window around each genomic position.
 Example:
     Basic usage::
 
-        from lib.fast_wps import WPS
-        
+        from lib.optwps import WPS
+
         wps_calc = WPS(protection_size=120)
         wps_calc.run(bamfile='input.bam', out_filepath='output.tsv')
 
@@ -40,36 +36,24 @@ import pysam
 import random
 import numpy as np
 
-import logging
-from lib.utils import exopen, isSoftClipped, ref_aln_length
+from lib.utils import exopen, is_soft_clipped, ref_aln_length
 from tqdm.auto import tqdm
-
-LOGGER = logging.getLogger(__name__)
 
 
 class ROIGenerator:
     """
     Generate regions of interest (ROI) for processing.
-    
+
     This class generates genomic regions either from a BED file or from the entire
     genome in the BAM file. Regions are yielded in chunks for memory-efficient processing.
-    
+
     Args:
         bed_file (str, optional): Path to BED file containing regions to process.
             If None, the entire genome will be processed. Default: None
         chunk_size (int, optional): Size of chunks in base pairs for processing.
             Default: 1e6 (1 megabase)
-    
-    Attributes:
-        bed_file (str): Path to BED file or None
-        chunk_size (int): Chunk size for region processing
-    
-    Example:
-        >>> roi_gen = ROIGenerator(bed_file='regions.bed', chunk_size=1e6)
-        >>> for chrom, start, end in roi_gen.regions(bam_file='sample.bam'):
-        ...     print(f"Processing {chrom}:{start}-{end}")
     """
-    
+
     def __init__(self, bed_file=None, chunk_size=1e6):
         self.bed_file = bed_file
         self.chunk_size = chunk_size
@@ -77,28 +61,27 @@ class ROIGenerator:
     def regions(self, bam_file=None):
         """
         Generate regions for processing.
-        
+
         Yields genomic regions either from a BED file or from the entire genome
         referenced in the BAM file. Regions are chunked according to chunk_size.
-        
+
         Args:
             bam_file (str, optional): Path to BAM file. Required if no BED file
                 is provided to determine genome regions. Default: None
-        
+
         Yields:
             tuple: (chromosome, start, end) for each region chunk
-        
+
         Raises:
             ValueError: If neither bed_file nor bam_file can provide regions
         """
         if (self.bed_file is None) or (not os.path.exists(self.bed_file)):
             input_file = pysam.Samfile(bam_file, "rb")
-            LOGGER.info("Processing entire genome from BAM file")
             nchunks = sum(
                 (input_file.get_reference_length(chrom) - 1) // self.chunk_size + 1
                 for chrom in input_file.references
             )
-            iterator = tqdm(total=nchunks)
+            iterator = tqdm(total=nchunks, desc="Processing genome regions")
             for chrom in input_file.references:
                 chrom_length = input_file.get_reference_length(chrom)
                 region_start = 0
@@ -111,11 +94,8 @@ class ROIGenerator:
         else:
             # read number of lines in bed file
             nlines = sum(1 for _ in exopen(self.bed_file, "r"))
-            LOGGER.info(
-                f"Processing regions from bed file: {self.bed_file} ({nlines} regions)"
-            )
             with exopen(self.bed_file, "r") as bed:
-                for line in tqdm(bed, total=nlines):
+                for line in tqdm(bed, total=nlines, desc="Processing BED regions"):
                     chrom, start, end = line.split()[:3]
                     chunk_start = int(start)
                     chunk_end = min(chunk_start + self.chunk_size, int(end))
@@ -128,16 +108,16 @@ class ROIGenerator:
 class WPS:
     """
     Window Protection Score (WPS) calculator for cell-free DNA analysis.
-    
+
     This class computes Window Protection Scores from aligned sequencing reads in BAM format.
     WPS quantifies the protection of DNA fragments around each genomic position, useful for
     identifying nucleosome positioning and other protected regions in cell-free DNA.
-    
+
     The algorithm calculates:
         - Outside score: fragments that completely span the protection window
         - Inside score: fragment endpoints falling within the protection window
         - WPS = outside - inside
-    
+
     Args:
         bed_file (str, optional): Path to BED file with regions to process.
             If None, processes entire genome. Default: None
@@ -152,7 +132,7 @@ class WPS:
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
             Default: 1e6 (1 Mb)
-    
+
     Attributes:
         bed_file (str): Path to BED file or None
         protection_size (int): Half of the protection window size
@@ -161,17 +141,17 @@ class WPS:
         max_insert_size (int): Maximum fragment size filter
         chunk_size (float): Chunk size for processing
         roi_generator (ROIGenerator): Region generator instance
-    
+
     Example:
         >>> wps = WPS(protection_size=120, min_insert_size=120, max_insert_size=180)
         >>> wps.run(bamfile='sample.bam', out_filepath='wps_output.tsv')
-    
+
     Note:
         - Automatically filters duplicate, QC-failed, and unmapped reads
         - Handles both paired-end and single-end sequencing data
         - Supports downsampling for high-coverage samples
     """
-    
+
     def __init__(
         self,
         bed_file=None,
@@ -183,56 +163,59 @@ class WPS:
     ):
         self.bed_file = bed_file
         self.protection_size = protection_size // 2
-        self.valid_chroms = valid_chroms
+        if valid_chroms is not None:
+            self.valid_chroms = [x.replace("chr", "") for x in valid_chroms]
+        else:
+            self.valid_chroms = None
         self.min_insert_size = min_insert_size
         self.max_insert_size = max_insert_size
         self.chunk_size = chunk_size
         self.roi_generator = ROIGenerator(bed_file=self.bed_file)
 
     def __call__(self, *args, **kwargs):
-        """Allow the class instance to be called as a function."""
         return self.run(*args, **kwargs)
 
     def run(
         self,
         bamfile,
-        out_filepath,
+        out_filepath="stdout",
         downsample_ratio=None,
+        verbose_output=False,
     ):
         """
         Calculate Window Protection Score for all regions and write to file.
-        
+
         Processes the BAM file to compute WPS values for each genomic position
         in the specified regions (or entire genome). Results are written to a
         tab-separated output file.
-        
+
         Args:
             bamfile (str): Path to input BAM file (must be sorted and indexed)
-            out_filepath (str): Path to output TSV file. Can be gzipped (.gz extension)
+            out_filepath (str): Path to output TSV file, or stdout (default)
             downsample_ratio (float, optional): Fraction of reads to randomly keep
                 (0.0 to 1.0). Useful for high-coverage samples. Default: None (no downsampling)
-        
+
         Returns:
             None: Results are written directly to out_filepath
-        
+
         Output Format:
             Tab-separated file with columns:
                 1. chromosome: Chromosome name (without 'chr' prefix)
                 2. start: Start position (0-based)
                 3. end: End position (1-based, start + 1)
-                4. outside: Count of fragments spanning the protection window
-                5. inside: Count of fragment endpoints in protection window
+                4. outside: Count of fragments spanning the protection window (if verbose_output)
+                5. inside: Count of fragment endpoints in protection window (if verbose_output)
                 6. wps: Window Protection Score (outside - inside)
-        
+
         Raises:
             FileNotFoundError: If bamfile does not exist
             ValueError: If downsample_ratio is not between 0 and 1
-        
+
         Example:
             >>> wps = WPS()
             >>> wps.run(bamfile='input.bam', out_filepath='output.tsv')
             >>> # With downsampling
-            >>> wps.run(bamfile='input.bam', out_filepath='output.tsv', 
+            >>> wps.run(bamfile='input.bam', out_filepath='output.tsv',
             ...         downsample_ratio=0.5)
         """
 
@@ -245,10 +228,12 @@ class WPS:
             for chrom, start, end in self.roi_generator.regions(bam_file=bamfile):
                 if "chr" in chrom:
                     chrom = chrom.replace("chr", "")
-                if chrom not in self.valid_chroms:
+                if self.valid_chroms is not None and chrom not in self.valid_chroms:
                     continue
-
-                regionStart, regionEnd = int(start), int(end)
+                try:
+                    regionStart, regionEnd = int(start), int(end)
+                except ValueError:
+                    continue
 
                 starts = []
                 ends = []
@@ -259,7 +244,7 @@ class WPS:
                 ):
                     if read.is_duplicate or read.is_qcfail or read.is_unmapped:
                         continue
-                    if isSoftClipped(read.cigartuples):
+                    if is_soft_clipped(read.cigartuples):
                         continue
 
                     if read.is_paired:
@@ -358,14 +343,25 @@ class WPS:
                     inside_cum = np.zeros(n, dtype=int)
                     wps = np.zeros(n, dtype=int)
                 for i in range(regionEnd - regionStart + 1):
-                    outfile.write(
-                        "%s\t%d\t%d\t%d\t%d\t%d\n"
-                        % (
-                            chrom,
-                            regionStart + i,
-                            regionStart + i + 1,  # add end coordinate
-                            outside_cum[i],
-                            inside_cum[i],
-                            wps[i],
+                    if verbose_output:
+                        outfile.write(
+                            "%s\t%d\t%d\t%d\t%d\t%d\n"
+                            % (
+                                chrom,
+                                regionStart + i,
+                                regionStart + i + 1,  # add end coordinate
+                                outside_cum[i],
+                                inside_cum[i],
+                                wps[i],
+                            )
                         )
-                    )
+                    else:
+                        outfile.write(
+                            "%s\t%d\t%d\t%d\n"
+                            % (
+                                chrom,
+                                regionStart + i,
+                                regionStart + i + 1,  # add end coordinate
+                                wps[i],
+                            )
+                        )

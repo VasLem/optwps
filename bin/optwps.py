@@ -6,8 +6,7 @@ This script provides a command-line interface for calculating Window Protection 
 from BAM files. It can be used directly or installed as a console script.
 """
 
-import logging
-from lib.optwps import WPS, LOGGER
+from lib.optwps import WPS
 
 
 def main():
@@ -19,86 +18,91 @@ def main():
         "-i",
         "--input",
         dest="input",
-        help="Use regions transcript file (def transcriptAnno.tsv)",
-        default="transcriptAnno.tsv",
-    )
-    parser.add_argument(
-        "-m",
-        "--merged",
-        dest="merged",
-        help="Assume reads are merged (default Off)",
-        default=False,
-        action="store_true",
-    )
-    parser.add_argument(
-        "-w",
-        "--protection",
-        dest="protection",
-        help="Base pair protection assumed for elements (default 120)",
-        default=120,
-        type="int",
+        help="Input BAM file",
+        required=True,
     )
     parser.add_argument(
         "-o",
         "--outfile",
         dest="outfile",
-        help="Outfile",
-    )  # reserve atleast 6 digits
-    parser.add_argument(
-        "-e",
-        "--empty",
-        dest="empty",
-        help="Keep files of empty blocks (def Off)",
-        default=False,
-        action="store_true",
+        help="The output file path for WPS results. If not provided, results will be printed to stdout.",
+        required=False,
     )
     parser.add_argument(
-        "--minInsert",
-        dest="minInsSize",
-        help="Minimum read length threshold to consider (def None)",
-        default=-1,
-        type="int",
+        "-r",
+        "--regions",
+        dest="regions",
+        help="BED file with regions of interest (default: whole genome)",
+        default=None,
     )
     parser.add_argument(
-        "--maxInsert",
-        dest="maxInsSize",
-        help="Minimum read length threshold to consider (def None)",
-        default=-1,
-        type="int",
+        "-w",
+        "--protection",
+        dest="protection",
+        help="Base pair protection window (default: 120)",
+        default=120,
+        type=int,
     )
     parser.add_argument(
-        "--max_length",
-        dest="max_length",
-        help="Assumed maximum insert size (default 1000)",
-        default=1000,
-        type="int",
+        "--min-insert-size",
+        dest="min_insert_size",
+        help="Minimum read length threshold to consider (Optional)",
+        default=None,
+        type=int,
+    )
+    parser.add_argument(
+        "--max-insert-size",
+        dest="max_insert_size",
+        help="Minimum read length threshold to consider (Optional)",
+        default=None,
+        type=int,
     )
     parser.add_argument(
         "--downsample",
         dest="downsample",
         help="Ratio to down sample reads (default OFF)",
         default=None,
-        type="float",
+        type=float,
     )
     parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbose",
-        help="Turn debug output on",
+        "--chunk-size",
+        dest="chunk_size",
+        help="Chunk size for processing in pieces (default 1e6)",
+        default=1e6,
+        type=int,
+    )
+    parser.add_argument(
+        "--valid-chroms",
+        dest="valid_chroms",
+        help="Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y. Optional",
+        default=None,
+        type=str,
+    )
+    parser.add_argument(
+        "--verbose-output",
+        dest="verbose_output",
+        help="If provided, output will include separate counts for 'outside' and 'inside' along with WPS.",
         action="store_true",
     )
     args = parser.parse_args()
-    if args.verbose:
-        LOGGER.setLevel(logging.DEBUG)
+    valid_chroms = None
+    if args.valid_chroms == "canonical":
+        valid_chroms = [str(i) for i in range(1, 23)] + ["X", "Y"]
     else:
-        LOGGER.setLevel(logging.INFO)
+        valid_chroms = args.valid_chroms.split(",") if args.valid_chroms else None
     optwps = WPS(
+        bed_file=args.regions,
         protection_size=args.protection,
-        min_insert_size=args.minInsSize if args.minInsSize > 0 else None,
-        max_insert_size=args.maxInsSize if args.maxInsSize > 0 else None,
+        min_insert_size=args.min_insert_size,
+        max_insert_size=args.max_insert_size,
+        chunk_size=args.chunk_size,
+        valid_chroms=valid_chroms,
     )
     optwps.run(
-        bamfile=args.input, out_filepath=args.outfile, downsample_ratio=args.downsample
+        bamfile=args.input,
+        out_filepath=args.outfile,
+        downsample_ratio=args.downsample,
+        verbose_output=args.verbose_output,
     )
 
 
