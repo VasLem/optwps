@@ -71,7 +71,8 @@ optwps = "optwps:main"
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
-
+[tool.uv-dynamic-versioning]
+fallback-version = "0.0.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
