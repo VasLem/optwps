@@ -1,0 +1,6 @@
+pysam
+numpy
+bx-python
+pytest
+pgzip
+tqdm
