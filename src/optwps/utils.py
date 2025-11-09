@@ -73,12 +73,12 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
         return nullcontext(sys.stdout)
     if fil.endswith(".gz"):
         try:
-            return gzip.open(
+            return pgzip.open(
                 fil, mode + "t" if not mode.endswith("b") else mode, *args, **kwargs
             )
         except BaseException:
             try:
-                return gzip.open(fil, mode + "t" if not mode.endswith("b") else mode)
+                return pgzip.open(fil, mode + "t" if not mode.endswith("b") else mode)
             except BaseException:
                 import gzip
 
