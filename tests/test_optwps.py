@@ -2,7 +2,7 @@ from pytest import fixture
 import pysam
 
 
-from lib.utils import exopen, is_soft_clipped, ref_aln_length
+from optwps import exopen, is_soft_clipped, ref_aln_length
 from bx.intervals import Intersecter, Interval
 
 
@@ -228,7 +228,7 @@ def old_implementation(
 def test_optwps_does_the_same_as_old_version_paired_end(
     make_test_bed_file, make_test_bam_file_paired, tmp_path
 ):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -265,7 +265,7 @@ def test_optwps_does_the_same_as_old_version_paired_end(
 def test_optwps_does_the_same_as_old_version_single_end(
     make_test_bed_file, make_test_bam_file_single, tmp_path
 ):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -302,7 +302,7 @@ def test_optwps_does_the_same_as_old_version_single_end(
 def test_optwps_downsampling(
     make_test_bed_file, make_test_bam_file_paired, make_test_bam_file_single, tmp_path
 ):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -328,7 +328,7 @@ def test_optwps_downsampling(
 
 
 def test_optwps_no_bed_file(make_test_bam_file_paired, tmp_path):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=None,
@@ -347,14 +347,13 @@ def test_optwps_no_bed_file(make_test_bam_file_paired, tmp_path):
 
 def test_gzbedfile_handling(make_test_bed_file, make_test_bam_file_paired, tmp_path):
     import gzip
-    from lib.utils import exopen
 
     # Create a gzipped version of the bed file
     gz_bed_path = tmp_path / "test_regions.bed.gz"
     with open(make_test_bed_file, "rb") as f_in:
         with gzip.open(gz_bed_path, "wb") as f_out:
             f_out.writelines(f_in)
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(gz_bed_path),
@@ -372,7 +371,7 @@ def test_gzbedfile_handling(make_test_bed_file, make_test_bam_file_paired, tmp_p
 def test_with_minsize_maxsize(
     make_test_bed_file, make_test_bam_file_paired, make_test_bam_file_single, tmp_path
 ):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),
@@ -400,7 +399,7 @@ def test_with_minsize_maxsize(
 def test_printed_to_stdout(
     make_test_bed_file, make_test_bam_file_paired, tmp_path, capsys
 ):
-    from lib.optwps import WPS
+    from optwps import WPS
 
     maker = WPS(
         bed_file=str(make_test_bed_file),

@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
 
 [project]
+dynamic = ["version"]
 name = "optwps"
-version = "1.0.0"
 description = "Fast Window Protection Score calculator for cell-free DNA analysis"
 readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "BSD 3"}
 authors = [
-    {name = "Vasileios Lemonidis"},
+    {name = "Vasileios Lemonidis", email = "vaslemonidis@hotmail.com"},
 ]
 maintainers = [
-    {name = "Vasileios Lemonidis"},
+    {name = "Vasileios Lemonidis", email = "vaslemonidis@hotmail.com"},
 ]
 keywords = [
     "bioinformatics",
@@ -66,13 +66,12 @@ Repository = "https://github.com/VasLem/optwps"
 "Bug Tracker" = "https://github.com/VasLem/optwps/issues"
 
 [project.scripts]
-optwps = "bin.optwps:main"
+optwps = "optwps:main"
 
-[tool.setuptools]
-packages = ["lib", "bin"]
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
 
-[tool.setuptools.package-data]
-lib = ["py.typed"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -81,7 +80,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--verbose",
-    "--cov=lib",
     "--cov-report=term-missing",
     "--cov-report=html",
 ]

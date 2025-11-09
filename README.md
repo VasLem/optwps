@@ -63,7 +63,7 @@ optwps \
 ### Python API
 
 ```python
-from lib.optwps import WPS
+from optwps import WPS
 
 # Initialize WPS calculator
 wps_calculator = WPS(
