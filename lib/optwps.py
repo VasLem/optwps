@@ -178,7 +178,7 @@ class WPS:
     def run(
         self,
         bamfile,
-        out_filepath="stdout",
+        out_filepath=None,
         downsample_ratio=None,
         verbose_output=False,
     ):
@@ -218,7 +218,8 @@ class WPS:
             >>> wps.run(bamfile='input.bam', out_filepath='output.tsv',
             ...         downsample_ratio=0.5)
         """
-
+        if out_filepath is None:
+            out_filepath = "stdout"
         input_file = pysam.Samfile(bamfile, "rb")
         prefix = (
             "chr" if any(r.startswith("chr") for r in input_file.references) else ""

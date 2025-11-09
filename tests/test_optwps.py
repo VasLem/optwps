@@ -1,13 +1,8 @@
-import os
-import tempfile
-
-import pytest
 from pytest import fixture
 import pysam
 
 
 from lib.utils import exopen, is_soft_clipped, ref_aln_length
-from collections import defaultdict
 from bx.intervals import Intersecter, Interval
 
 
@@ -400,3 +395,27 @@ def test_with_minsize_maxsize(
     )
     lines = open(tmp_output).readlines()
     assert len(lines) > 0  # Just check that some output is produced
+
+
+def test_printed_to_stdout(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path, capsys
+):
+    from lib.optwps import WPS
+
+    maker = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+    )
+    maker.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=None,
+        verbose_output=True,
+    )
+    captured = capsys.readouterr()
+    lines = captured.out.strip().split("\n")
+    assert len(lines) > 0  # Just check that some output is produced
+    # Check that verbose output columns are present
+    for line in lines:
+        cols = line.split("\t")
+        assert len(cols) == 6  # chrom, pos_start, pos_end, gcount, bcount, wps
