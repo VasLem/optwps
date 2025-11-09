@@ -6,15 +6,6 @@ A high-performance Python package for computing Window Protection Score (WPS) fr
 
 `optwps` is a fast and efficient tool for calculating Window Protection Scores from aligned sequencing reads. WPS is a metric used in cell-free DNA analysis to identify nucleosome positioning and protected regions by analyzing fragment coverage patterns.
 
-## Features
-
-- **Fast Processing**: Optimized numpy-based implementation for efficient WPS calculation
-- **Flexible Input**: Supports both paired-end and single-end sequencing data
-- **Region-Based Analysis**: Process specific genomic regions via BED files or entire genomes
-- **Customizable Parameters**: Adjust protection size, insert size filters, and downsampling
-- **Parallel Processing**: Automatic multi-core support for compressed file handling
-- **Memory Efficient**: Chunked processing for large genomic regions
-
 ## Installation
 
 ### From Source
