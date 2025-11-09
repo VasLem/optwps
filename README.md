@@ -1,6 +1,6 @@
 # optwps
 
-A high-performance Python package for computing Window Protection Score (WPS) from BAM files, designed for cell-free DNA (cfDNA) analysis.
+A high-performance Python package for computing Window Protection Score (WPS) from BAM files, designed for cell-free DNA (cfDNA) analysis. It was built as a direct alternative of a script provided by the [Kircher Lab](https://github.com/kircherlab/cfDNA.git), and has been tested to replicate the exact numbers.
 
 ## Overview
 
@@ -87,23 +87,6 @@ wps_calculator.run(
 )
 ```
 
-### Using BED Files for Specific Regions
-
-```python
-from lib.optwps import WPS
-
-# Process only specific regions
-wps_calculator = WPS(
-    bed_file='regions.bed',
-    protection_size=120
-)
-
-wps_calculator.run(
-    bamfile='input.bam',
-    out_filepath='output.tsv'
-)
-```
-
 ## Output Format
 
 The output is a tab-separated file with the following columns:
@@ -125,7 +108,7 @@ Example output:
 
 ## Algorithm
 
-The WPS algorithm works as follows:
+The Windowed Protection Score [![DOI](https://img.shields.io/badge/DOI-110.1016%2Fj.cell.2015.11.050-blue?style=flat-square)](https://doi.org/10.1016/j.cell.2015.11.050) algorithm has the following steps:
 
 1. **Fragment Collection**: For each genomic position, collect all DNA fragments (paired-end reads or single reads) in the region
 
@@ -133,27 +116,11 @@ The WPS algorithm works as follows:
 
 3. **Score Calculation**:
    - **Outside Score**: Count fragments that completely span the protection window
-   - **Inside Score**: Count fragment endpoints that fall within the protection window
+   - **Inside Score**: Count fragment endpoints that fall within the protection window (exclusive boundaries)
    - **WPS**: Subtract inside score from outside score: `WPS = outside - inside`
 
 4. **Interpretation**: Positive WPS values indicate protected regions (likely nucleosome-bound), while negative values suggest accessible regions
 
-## Performance Considerations
-
-- **Chunk Size**: Processing is done in chunks (default 1MB) to manage memory usage
-- **Downsampling**: Use `--downsample` to reduce processing time for high-coverage samples
-- **Parallel Processing**: Compressed output files automatically use multiple cores via `pgzip`
-- **Valid Chromosomes**: By default, only autosomes and sex chromosomes are processed
-
-## Quality Control
-
-The tool automatically filters out:
-- Duplicate reads (`read.is_duplicate`)
-- QC-failed reads (`read.is_qcfail`)
-- Unmapped reads (`read.is_unmapped`)
-- Soft-clipped reads
-- Reads with unmapped mates (paired-end mode)
-- Inter-chromosomal pairs (paired-end mode)
 
 ## Examples
 
@@ -163,12 +130,12 @@ The tool automatically filters out:
 python bin/make_wps.py -i sample.bam -o sample_wps.tsv
 ```
 
-### Example 2: Nucleosome-Sized Fragments Only
+### Example 2: Providing a regions bed file, limiting the range of the size of the inserts considered, and printing to the terminal
 
 ```bash
 python bin/make_wps.py \
     -i sample.bam \
-    -o nucleosome_wps.tsv \
+    -r regions.tsv \
     --min_insert_size 120 \
     --max_insert_size 180
 ```
@@ -179,67 +146,6 @@ python bin/make_wps.py \
 python bin/make_wps.py \
     -i high_coverage.bam \
     -o regions_wps.tsv \
-    --bed regions_of_interest.bed \
+    -r regions_of_interest.bed \
     --downsample 0.3
 ```
-
-## Testing
-
-Run the test suite:
-
-```bash
-pytest tests/
-```
-
-Run with verbose output:
-
-```bash
-pytest tests/ -v
-```
-
-## Citation
-
-If you use `optwps` in your research, please cite:
-
-[Add citation information here]
-
-## License
-
-[Add license information here]
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Contact
-
-[Add contact information here]
-
-## Acknowledgments
-
-This tool implements the Window Protection Score algorithm as described in the cell-free DNA literature for nucleosome positioning analysis.
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: "No module named 'lib.optwps'"
-- **Solution**: Make sure you're running from the project root directory or install the package
-
-**Issue**: Slow processing for large BAM files
-- **Solution**: Use `--downsample` option or process specific regions with a BED file
-
-**Issue**: High memory usage
-- **Solution**: Reduce chunk_size parameter when initializing WPS class
-
-**Issue**: Missing chromosomes in output
-- **Solution**: Check that chromosome names match (with/without "chr" prefix) and verify `valid_chroms` parameter
-
-## Version History
-
-### Version 1.0.0
-- Initial release
-- Support for paired-end and single-end reads
-- BED file region support
-- Configurable protection size and insert size filters
-- Downsampling support
