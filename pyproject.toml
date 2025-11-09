@@ -41,7 +41,7 @@ classifiers = [
 dependencies = [
     "pysam",
     "bx-python",
-    "pgzip",
+    "pigz",
     "tqdm",
     "numpy",
 ]

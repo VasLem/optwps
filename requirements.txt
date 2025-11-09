@@ -2,5 +2,5 @@ pysam
 numpy
 bx-python
 pytest
-pgzip
+pigz
 tqdm

@@ -8,7 +8,7 @@ _open = open
 
 import os
 import sys
-import pgzip
+import pigz
 from contextlib import nullcontext
 
 
@@ -51,7 +51,7 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
     Open a file with automatic gzip support and parallel compression.
 
     This function wraps the standard open() function with automatic detection
-    and handling of gzipped files using parallel compression (pgzip) for better
+    and handling of gzipped files using parallel compression (pigz) for better
     performance on multi-core systems. Also supports writing to stdout.
 
     Args:
@@ -64,7 +64,7 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
         **kwargs: Additional keyword arguments passed to open function
 
     Returns:
-        file object: Opened file handle (either stdout, standard or pgzip)
+        file object: Opened file handle (either stdout, standard or pigz)
     """
     if njobs == -1:
         njobs = os.cpu_count()
@@ -73,25 +73,10 @@ def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
         return nullcontext(sys.stdout)
     if fil.endswith(".gz"):
         try:
-            return pgzip.open(
+            return pigz.open(
                 fil, mode + "t" if not mode.endswith("b") else mode, *args, **kwargs
             )
         except BaseException:
-            try:
-                return pgzip.open(fil, mode + "t" if not mode.endswith("b") else mode)
-            except BaseException:
-                import gzip
-
-                try:
-                    return gzip.open(
-                        fil,
-                        mode + "t" if not mode.endswith("b") else mode,
-                        *args,
-                        **kwargs,
-                    )
-                except BaseException:
-                    return gzip.open(
-                        fil, mode + "t" if not mode.endswith("b") else mode
-                    )
+            return pigz.open(fil, mode + "t" if not mode.endswith("b") else mode)
 
     return _open(fil, mode, *args, **kwargs)

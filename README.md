@@ -23,7 +23,7 @@ pip install optwps
 - Python >= 3.7
 - pysam
 - numpy
-- pgzip
+- pigz
 - tqdm
 - bx-python
 
