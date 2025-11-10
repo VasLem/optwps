@@ -1,6 +1,7 @@
 # optwps
 
-[![PyPI version](https://badge.fury.io/py/optwps.svg)](https://badge.fury.io/py/optwps)
+![PyPI - Version](https://img.shields.io/pypi/v/optwps)
+[![Tests](https://github.com/VasLem/optwps/actions/workflows/tests.yml/badge.svg)](https://github.com/VasLem/optwps/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/VasLem/optwps/branch/master/graph/badge.svg)](https://codecov.io/gh/VasLem/optwps)
 [![DOI](https://zenodo.org/badge/1092793606.svg)](https://doi.org/10.5281/zenodo.17566994)
 
