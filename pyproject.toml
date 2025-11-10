@@ -43,7 +43,7 @@ dependencies = [
     "bx-python",
     "pigz",
     "tqdm",
-    "numpy",
+    "pandas",
 ]
 
 [project.optional-dependencies]

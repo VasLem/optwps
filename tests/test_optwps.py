@@ -266,6 +266,29 @@ def test_with_minsize_maxsize(
     assert len(lines) > 0  # Just check that some output is produced
 
 
+def test_with_coverage_computation(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    maker = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+    )
+    tmp_output = tmp_path / "wps_output_with_coverage.tsv"
+    tmp_output = str(tmp_output)
+    maker.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=tmp_output,
+        compute_coverage=True,
+    )
+    lines = open(tmp_output).readlines()
+    assert len(lines) > 0  # Just check that some output is produced
+    # Check that coverage column is present
+    assert len(lines[0].strip().split("\t")) == 5  # chrom, start, end, coverage, wps
+
+
 def test_printed_to_stdout(
     make_test_bed_file, make_test_bam_file_paired, tmp_path, capsys
 ):

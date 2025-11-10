@@ -44,6 +44,7 @@ import sys
 import pysam
 import random
 import numpy as np
+import pandas as pd
 
 from optwps.utils import exopen, is_soft_clipped, ref_aln_length
 from tqdm.auto import tqdm
@@ -231,6 +232,7 @@ class WPS:
         bamfile,
         out_filepath=None,
         downsample_ratio=None,
+        compute_coverage=False,
         verbose_output=False,
     ):
         """
@@ -247,21 +249,21 @@ class WPS:
                 per-chromosome files. Both can be used together.
             downsample_ratio (float, optional): Fraction of reads to randomly keep
                 (0.0 to 1.0). Useful for high-coverage samples. Default: None (no downsampling)
+            compute_coverage (bool, optional): Whether to compute and include base coverage
+            verbose_output (bool, optional): Whether to include detailed counts
 
         Returns:
             None: Results are written directly to out_filepath
 
         Output Format:
             Tab-separated file with columns:
-                1. chromosome: Chromosome name (without 'chr' prefix)
-                2. start: Start position (0-based)
-                3. end: End position (1-based, start + 1)
-                4. wps: Window Protection Score (outside - inside)
-
-            With verbose_output=True, additional columns are included:
-                4. outside: Count of fragments spanning the protection window
-                5. inside: Count of fragment endpoints in protection window
-                6. wps: Window Protection Score (outside - inside)
+                - chromosome: Chromosome name (without 'chr' prefix)
+                - start: Start position (0-based)
+                - end: End position (1-based, start + 1)
+                - base read coverage (if compute_coverage=True)
+                - outside: Count of fragments spanning the protection window (if verbose_output=True)
+                - inside: Count of fragment endpoints in protection window (if verbose_output=True)
+                - wps: Window Protection Score (outside - inside)
 
         Raises:
             FileNotFoundError: If bamfile does not exist
@@ -369,7 +371,6 @@ class WPS:
             if len(starts) > 0:
                 starts = np.array(starts)
                 ends = np.array(ends)
-
                 # Fragments fully spanning the window boundaries
                 span_start = starts + self.protection_size - regionStart
                 span_end = ends - self.protection_size - regionStart + 2
@@ -396,7 +397,7 @@ class WPS:
                     1,
                 )
 
-                outside_cum = np.cumsum(outside)[:-1]
+                outside_cum = np.cumsum(outside)[:-2]
 
                 # Fragments whose endpoints fall inside windows
                 all_ends = np.concatenate([starts, ends]) - regionStart
@@ -405,13 +406,30 @@ class WPS:
                 inside = np.zeros(n + 2, dtype=int)
                 np.add.at(inside, left, 1)
                 np.add.at(inside, right, -1)
-                inside_cum = np.cumsum(inside)[:-1]
+                inside_cum = np.cumsum(inside)[:-2]
 
                 wps = outside_cum - inside_cum
+                coverage = None
+                if compute_coverage:
+                    coverage = np.zeros(n + 1, dtype=int)
+                    np.add.at(
+                        coverage,
+                        np.clip(starts - regionStart, 0, n),
+                        1,
+                    )
+                    np.add.at(
+                        coverage,
+                        np.clip(ends - regionStart + 1, 0, n),
+                        -1,
+                    )
+                    coverage = np.cumsum(coverage)[:-1]
             else:
                 outside_cum = np.zeros(n, dtype=int)
                 inside_cum = np.zeros(n, dtype=int)
                 wps = np.zeros(n, dtype=int)
+                coverage = None
+                if compute_coverage:
+                    coverage = np.zeros(n, dtype=int)
             partial_outfile = None
             if use_partial_writer:
                 formatted_out_filepath = out_filepath.format(
@@ -430,29 +448,16 @@ class WPS:
                 except AttributeError:
                     pass
             outfile = partial_outfile if use_partial_writer else total_outfile
-            for i in range(regionEnd - regionStart + 1):
-                if verbose_output:
-                    outfile.write(
-                        "%s\t%d\t%d\t%d\t%d\t%d\n"
-                        % (
-                            chrom,
-                            regionStart + i,
-                            regionStart + i + 1,  # add end coordinate
-                            outside_cum[i],
-                            inside_cum[i],
-                            wps[i],
-                        )
-                    )
-                else:
-                    outfile.write(
-                        "%s\t%d\t%d\t%d\n"
-                        % (
-                            chrom,
-                            regionStart + i,
-                            regionStart + i + 1,  # add end coordinate
-                            wps[i],
-                        )
-                    )
+            st = np.arange(regionStart, regionEnd + 1)
+            en = st + 1  # add end coordinate
+            df = pd.DataFrame({"#chrom": chrom, "start": st, "end": en})
+            if compute_coverage:
+                df["coverage"] = coverage
+            if verbose_output:
+                df["outside"] = outside_cum
+                df["inside"] = inside_cum
+            df["wps"] = wps
+            df.to_csv(outfile, sep="\t", header=False, index=False)
 
         if use_partial_writer:
             for writer in partial_writers.values():
@@ -531,6 +536,12 @@ def main():
         type=str,
     )
     parser.add_argument(
+        "--compute-coverage",
+        dest="compute_coverage",
+        help="If provided, output will include base read coverage as the 4th column.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--verbose-output",
         dest="verbose_output",
         help="If provided, output will include separate counts for 'outside' and 'inside' along with WPS.",
@@ -554,6 +565,7 @@ def main():
         bamfile=args.input,
         out_filepath=args.output,
         downsample_ratio=args.downsample,
+        compute_coverage=args.compute_coverage,
         verbose_output=args.verbose_output,
     )
 

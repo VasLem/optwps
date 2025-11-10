@@ -22,7 +22,7 @@ pip install optwps
 
 - Python >= 3.7
 - pysam
-- numpy
+- pandas
 - pigz
 - tqdm
 - bx-python
@@ -85,36 +85,37 @@ wps_calculator.run(
 
 ## Output Format
 
-The output is a tab-separated file with the following columns:
+The output is a tab-separated no-header file with the following columns:
 
-1. **chromosome**: Chromosome name
-2. **start**: Start position (0-based)
-3. **end**: End position (1-based)
-4. **wps**: Window Protection Score (outside - inside)
-
-When using `--verbose-output`, additional columns are included:
-
-1. **chromosome**: Chromosome name
-2. **start**: Start position (0-based)
-3. **end**: End position (1-based)
-4. **outside**: Count of fragments fully spanning the protection window
-5. **inside**: Count of fragment endpoints falling inside the protection window
-6. **wps**: Window Protection Score (outside - inside)
+    - Chromosome name (without 'chr' prefix)
+    - Start position (0-based)
+    - End position (start + 1)
+    - Base read coverage (if `--compute-coverage`)
+    - Count of fragments spanning the protection window (if `--verbose-output`)
+    - Count of fragment endpoints in protection window (if `--verbose-output`)
+    - Window Protection Score (outside - inside)
 
 Example output:
 
 ```
-1    1000    1001    12
-1    1001    1002    14
-1    1002    1003    10
+1\t1000\t1001\t12
+1\t1001\t1002\t14
+1\t1002\t1003\t10
+```
+
+With `--compute-coverage`
+```
+1\t1000\t1001\t20\t12
+1\t1001\t1002\t20\t14
+1\t1002\t1003\t19\t10
 ```
 
 With `--verbose-output`:
 
 ```
-1    1000    1001    15    3    12
-1    1001    1002    16    2    14
-1    1002    1003    14    4    10
+1\t1000\t1001\t15\t3\t12
+1\t1001\t1002\t16\t2\t14
+1\t1002\t1003\t14\t4\t10
 ```
 
 ## Algorithm
@@ -166,4 +167,13 @@ optwps \
 optwps \
     -i sample.bam \
     -o "wps_{chrom}.tsv"
+```
+
+### Example 5: Include coverage
+
+```bash
+optwps \
+    -i sample.bam \
+    --compute_coverage \
+    -o "wps.tsv"
 ```
