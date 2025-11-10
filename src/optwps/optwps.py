@@ -17,6 +17,14 @@ Example:
         wps_calc = WPS(protection_size=120)
         wps_calc.run(bamfile='input.bam', out_filepath='output.tsv')
 
+    Creating separate output files::
+
+        # Per chromosome
+        wps_calc.run(bamfile='input.bam', out_filepath='wps_{chrom}.tsv')
+
+        # Per target region
+        wps_calc.run(bamfile='input.bam', out_filepath='wps_{target}.tsv.gz')
+
 Note:
     - Op BAM Description
     - M 0 alignment match (can be a sequence match or mismatch)
@@ -32,6 +40,7 @@ Note:
 """
 
 import os
+import sys
 import pysam
 import random
 import numpy as np
@@ -70,7 +79,9 @@ class ROIGenerator:
                 is provided to determine genome regions. Default: None
 
         Yields:
-            tuple: (chromosome, start, end) for each region chunk
+            tuple: (chromosome, chunk_start, chunk_end, region_start, region_end)
+                where chunk_start/chunk_end define the current chunk being processed
+                and region_start/region_end define the full original region boundaries
 
         Raises:
             ValueError: If neither bed_file nor bam_file can provide regions
@@ -87,7 +98,7 @@ class ROIGenerator:
                 region_start = 0
                 while region_start < chrom_length:
                     region_end = min(region_start + self.chunk_size, chrom_length)
-                    yield chrom, region_start, region_end
+                    yield chrom, region_start, region_end, 0, chrom_length
                     region_start = region_end
                     iterator.update(1)
             iterator.close()
@@ -100,9 +111,45 @@ class ROIGenerator:
                     chunk_start = int(start)
                     chunk_end = min(chunk_start + self.chunk_size, int(end))
                     while chunk_start < int(end):
-                        yield chrom, chunk_start, chunk_end
+                        yield chrom, chunk_start, chunk_end, int(start), int(end)
                         chunk_start = chunk_end
                         chunk_end = min(chunk_start + self.chunk_size, int(end))
+
+
+class CMWriterUnpacker:
+    """
+    Wrapper for file handles to provide consistent write and close interface.
+
+    This class handles both context managers and direct file handles, providing
+    a unified interface for writing data and closing files. It also prevents
+    closing stdout to avoid unexpected behavior.
+
+    Args:
+        cm: A context manager or file handle object
+
+    Attributes:
+        cm: The original context manager
+        handle: The unpacked file handle
+    """
+
+    def __init__(self, cm):
+        self.cm = cm
+        try:
+            self.handle = self.cm.__enter__()
+        except AttributeError:
+            self.handle = self.cm
+
+    def write(self, data):
+        """Write data to the file handle."""
+        self.handle.write(data)
+
+    def close(self):
+        """Close the file handle, avoiding closure of stdout."""
+        try:
+            if self.handle != sys.stdout:
+                self.handle.close()
+        except AttributeError:
+            self.cm.__exit__(None, None, None)
 
 
 class WPS:
@@ -145,11 +192,15 @@ class WPS:
     Example:
         >>> wps = WPS(protection_size=120, min_insert_size=120, max_insert_size=180)
         >>> wps.run(bamfile='sample.bam', out_filepath='wps_output.tsv')
+        >>> # Process specific chromosomes
+        >>> wps = WPS(valid_chroms={'1', '2', '3', 'X', 'Y'})
+        >>> wps.run(bamfile='sample.bam', out_filepath='chr_wps.tsv')
 
     Note:
         - Automatically filters duplicate, QC-failed, and unmapped reads
         - Handles both paired-end and single-end sequencing data
         - Supports downsampling for high-coverage samples
+        - Can write to separate files per chromosome or target region using placeholders
     """
 
     def __init__(
@@ -191,7 +242,9 @@ class WPS:
 
         Args:
             bamfile (str): Path to input BAM file (must be sorted and indexed)
-            out_filepath (str): Path to output TSV file, or stdout (default)
+            out_filepath (str): Path to output TSV file, or stdout (default).
+                If it contains a formatting substring {target} or {chrom}, it will be used to create per-target  or
+                per-chromosome files. Both can be used together.
             downsample_ratio (float, optional): Fraction of reads to randomly keep
                 (0.0 to 1.0). Useful for high-coverage samples. Default: None (no downsampling)
 
@@ -203,8 +256,11 @@ class WPS:
                 1. chromosome: Chromosome name (without 'chr' prefix)
                 2. start: Start position (0-based)
                 3. end: End position (1-based, start + 1)
-                4. outside: Count of fragments spanning the protection window (if verbose_output)
-                5. inside: Count of fragment endpoints in protection window (if verbose_output)
+                4. wps: Window Protection Score (outside - inside)
+
+            With verbose_output=True, additional columns are included:
+                4. outside: Count of fragments spanning the protection window
+                5. inside: Count of fragment endpoints in protection window
                 6. wps: Window Protection Score (outside - inside)
 
         Raises:
@@ -217,6 +273,10 @@ class WPS:
             >>> # With downsampling
             >>> wps.run(bamfile='input.bam', out_filepath='output.tsv',
             ...         downsample_ratio=0.5)
+            >>> # Creating separate files per chromosome
+            >>> wps.run(bamfile='input.bam', out_filepath='wps_{chrom}.tsv')
+            >>> # Creating separate files per target region
+            >>> wps.run(bamfile='input.bam', out_filepath='wps_{target}.tsv.gz')
         """
         if out_filepath is None:
             out_filepath = "stdout"
@@ -224,148 +284,181 @@ class WPS:
         prefix = (
             "chr" if any(r.startswith("chr") for r in input_file.references) else ""
         )
-        with exopen(out_filepath, "w") as outfile:
+        use_partial_writer = "{target}" in out_filepath or "{chrom}" in out_filepath
+        partial_writers = dict()
+        total_outfile = None
+        if not use_partial_writer:
+            total_outfile = CMWriterUnpacker(exopen(out_filepath, "w"))
+            try:
+                total_outfile = total_outfile.__enter__()
+            except AttributeError:
+                pass
 
-            for chrom, start, end in self.roi_generator.regions(bam_file=bamfile):
-                if "chr" in chrom:
-                    chrom = chrom.replace("chr", "")
-                if self.valid_chroms is not None and chrom not in self.valid_chroms:
+        for chrom, start, end, total_start, total_end in self.roi_generator.regions(
+            bam_file=bamfile
+        ):
+            if "chr" in chrom:
+                chrom = chrom.replace("chr", "")
+            if self.valid_chroms is not None and chrom not in self.valid_chroms:
+                continue
+            try:
+                regionStart, regionEnd = int(start), int(end)
+            except ValueError:
+                continue
+
+            starts = []
+            ends = []
+            for read in input_file.fetch(
+                prefix + chrom,
+                max(0, regionStart - self.protection_size - 1),
+                regionEnd + self.protection_size + 1,
+            ):
+                if read.is_duplicate or read.is_qcfail or read.is_unmapped:
                     continue
-                try:
-                    regionStart, regionEnd = int(start), int(end)
-                except ValueError:
+                if is_soft_clipped(read.cigartuples):
                     continue
 
-                starts = []
-                ends = []
-                for read in input_file.fetch(
-                    prefix + chrom,
-                    max(0, regionStart - self.protection_size - 1),
-                    regionEnd + self.protection_size + 1,
-                ):
-                    if read.is_duplicate or read.is_qcfail or read.is_unmapped:
+                if read.is_paired:
+                    if read.mate_is_unmapped:
                         continue
-                    if is_soft_clipped(read.cigartuples):
+                    if read.rnext != read.tid:
                         continue
-
-                    if read.is_paired:
-                        if read.mate_is_unmapped:
+                    if read.is_read1 or (
+                        read.is_read2
+                        and read.pnext + read.qlen
+                        < regionStart - self.protection_size - 1
+                    ):
+                        if read.isize == 0:
                             continue
-                        if read.rnext != read.tid:
-                            continue
-                        if read.is_read1 or (
-                            read.is_read2
-                            and read.pnext + read.qlen
-                            < regionStart - self.protection_size - 1
-                        ):
-                            if read.isize == 0:
-                                continue
-                            if (
-                                downsample_ratio is not None
-                                and random.random() >= downsample_ratio
-                            ):
-                                continue
-                            lseq = abs(read.isize)
-                            if (
-                                self.min_insert_size is not None
-                                and lseq < self.min_insert_size
-                            ):
-                                continue
-                            if (
-                                self.max_insert_size is not None
-                                and lseq > self.max_insert_size
-                            ):
-                                continue
-                            rstart = min(read.pos, read.pnext)
-                            rend = rstart + lseq - 1
-                            starts.append(rstart)
-                            ends.append(rend)
-                    else:
                         if (
                             downsample_ratio is not None
                             and random.random() >= downsample_ratio
                         ):
                             continue
-                        rstart = read.pos
-                        lseq = ref_aln_length(read.cigartuples)
-                        if self.min_insert_size is not None and (
-                            (lseq < self.min_insert_size)
-                            or (lseq > self.max_insert_size)
+                        lseq = abs(read.isize)
+                        if (
+                            self.min_insert_size is not None
+                            and lseq < self.min_insert_size
                         ):
                             continue
-                        rend = rstart + lseq - 1  # end included
+                        if (
+                            self.max_insert_size is not None
+                            and lseq > self.max_insert_size
+                        ):
+                            continue
+                        rstart = min(read.pos, read.pnext)
+                        rend = rstart + lseq - 1
                         starts.append(rstart)
                         ends.append(rend)
-                n = regionEnd - regionStart + 1
-                if len(starts) > 0:
-                    starts = np.array(starts)
-                    ends = np.array(ends)
-
-                    # Fragments fully spanning the window boundaries
-                    span_start = starts + self.protection_size - regionStart
-                    span_end = ends - self.protection_size - regionStart + 2
-                    valid = span_end >= span_start
-                    outside = np.zeros(n + 2, dtype=int)
-                    np.add.at(
-                        outside,
-                        np.clip(span_start[valid] + 1, 0, n + 1),
-                        1,
-                    )
-                    np.add.at(
-                        outside,
-                        np.clip(span_end[valid], 0, n + 1),
-                        -1,
-                    )
-                    np.add.at(
-                        outside,
-                        np.clip(span_start[~valid] + 1, 0, n + 1),
-                        -1,
-                    )
-                    np.add.at(
-                        outside,
-                        np.clip(span_end[~valid], 0, n + 1),
-                        1,
-                    )
-
-                    outside_cum = np.cumsum(outside)[:-1]
-
-                    # Fragments whose endpoints fall inside windows
-                    all_ends = np.concatenate([starts, ends]) - regionStart
-                    left = np.clip(all_ends - self.protection_size + 2, 0, n + 1)
-                    right = np.clip(all_ends + self.protection_size + 1, 0, n + 1)
-                    inside = np.zeros(n + 2, dtype=int)
-                    np.add.at(inside, left, 1)
-                    np.add.at(inside, right, -1)
-                    inside_cum = np.cumsum(inside)[:-1]
-
-                    wps = outside_cum - inside_cum
                 else:
-                    outside_cum = np.zeros(n, dtype=int)
-                    inside_cum = np.zeros(n, dtype=int)
-                    wps = np.zeros(n, dtype=int)
-                for i in range(regionEnd - regionStart + 1):
-                    if verbose_output:
-                        outfile.write(
-                            "%s\t%d\t%d\t%d\t%d\t%d\n"
-                            % (
-                                chrom,
-                                regionStart + i,
-                                regionStart + i + 1,  # add end coordinate
-                                outside_cum[i],
-                                inside_cum[i],
-                                wps[i],
-                            )
+                    if (
+                        downsample_ratio is not None
+                        and random.random() >= downsample_ratio
+                    ):
+                        continue
+                    rstart = read.pos
+                    lseq = ref_aln_length(read.cigartuples)
+                    if self.min_insert_size is not None and (
+                        (lseq < self.min_insert_size) or (lseq > self.max_insert_size)
+                    ):
+                        continue
+                    rend = rstart + lseq - 1  # end included
+                    starts.append(rstart)
+                    ends.append(rend)
+            n = regionEnd - regionStart + 1
+            if len(starts) > 0:
+                starts = np.array(starts)
+                ends = np.array(ends)
+
+                # Fragments fully spanning the window boundaries
+                span_start = starts + self.protection_size - regionStart
+                span_end = ends - self.protection_size - regionStart + 2
+                valid = span_end >= span_start
+                outside = np.zeros(n + 2, dtype=int)
+                np.add.at(
+                    outside,
+                    np.clip(span_start[valid] + 1, 0, n + 1),
+                    1,
+                )
+                np.add.at(
+                    outside,
+                    np.clip(span_end[valid], 0, n + 1),
+                    -1,
+                )
+                np.add.at(
+                    outside,
+                    np.clip(span_start[~valid] + 1, 0, n + 1),
+                    -1,
+                )
+                np.add.at(
+                    outside,
+                    np.clip(span_end[~valid], 0, n + 1),
+                    1,
+                )
+
+                outside_cum = np.cumsum(outside)[:-1]
+
+                # Fragments whose endpoints fall inside windows
+                all_ends = np.concatenate([starts, ends]) - regionStart
+                left = np.clip(all_ends - self.protection_size + 2, 0, n + 1)
+                right = np.clip(all_ends + self.protection_size + 1, 0, n + 1)
+                inside = np.zeros(n + 2, dtype=int)
+                np.add.at(inside, left, 1)
+                np.add.at(inside, right, -1)
+                inside_cum = np.cumsum(inside)[:-1]
+
+                wps = outside_cum - inside_cum
+            else:
+                outside_cum = np.zeros(n, dtype=int)
+                inside_cum = np.zeros(n, dtype=int)
+                wps = np.zeros(n, dtype=int)
+            partial_outfile = None
+            if use_partial_writer:
+                formatted_out_filepath = out_filepath.format(
+                    target=f"{chrom}_{total_start}_{total_end}",
+                    chrom=chrom,
+                )
+                partial_outfile = partial_writers.get(
+                    formatted_out_filepath,
+                    CMWriterUnpacker(
+                        exopen(formatted_out_filepath, "w", use_pigz=False)
+                    ),
+                )
+                partial_writers[formatted_out_filepath] = partial_outfile
+                try:
+                    partial_outfile = partial_outfile.__enter__()
+                except AttributeError:
+                    pass
+            outfile = partial_outfile if use_partial_writer else total_outfile
+            for i in range(regionEnd - regionStart + 1):
+                if verbose_output:
+                    outfile.write(
+                        "%s\t%d\t%d\t%d\t%d\t%d\n"
+                        % (
+                            chrom,
+                            regionStart + i,
+                            regionStart + i + 1,  # add end coordinate
+                            outside_cum[i],
+                            inside_cum[i],
+                            wps[i],
                         )
-                    else:
-                        outfile.write(
-                            "%s\t%d\t%d\t%d\n"
-                            % (
-                                chrom,
-                                regionStart + i,
-                                regionStart + i + 1,  # add end coordinate
-                                wps[i],
-                            )
+                    )
+                else:
+                    outfile.write(
+                        "%s\t%d\t%d\t%d\n"
+                        % (
+                            chrom,
+                            regionStart + i,
+                            regionStart + i + 1,  # add end coordinate
+                            wps[i],
                         )
+                    )
+
+        if use_partial_writer:
+            for writer in partial_writers.values():
+                writer.close()
+        else:
+            total_outfile.close()
 
 
 def main():
@@ -382,8 +475,8 @@ def main():
     )
     parser.add_argument(
         "-o",
-        "--outfile",
-        dest="outfile",
+        "--output",
+        dest="output",
         help="The output file path for WPS results. If not provided, results will be printed to stdout.",
         required=False,
     )
@@ -459,7 +552,7 @@ def main():
     )
     optwps.run(
         bamfile=args.input,
-        out_filepath=args.outfile,
+        out_filepath=args.output,
         downsample_ratio=args.downsample,
         verbose_output=args.verbose_output,
     )

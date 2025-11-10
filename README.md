@@ -52,7 +52,7 @@ optwps \
 ### Command Line Arguments
 
 - `-i, --input`: Input BAM file (required)
-- `-o, --outfile`: Output file path for WPS results. If not provided, results will be printed to stdout (optional)
+- `-o, --output`: Output file path for WPS results. If not provided, results will be printed to stdout. Supports placeholders `{chrom}` and `{target}` for creating separate files per chromosome or region (optional)
 - `-r, --regions`: BED file with regions of interest (default: whole genome, optional)
 - `-w, --protection`: Base pair protection window (default: 120)
 - `--min-insert-size`: Minimum read length threshold to consider (optional)
@@ -90,11 +90,26 @@ The output is a tab-separated file with the following columns:
 1. **chromosome**: Chromosome name
 2. **start**: Start position (0-based)
 3. **end**: End position (1-based)
-4. **outside**: Count of fragments fully spanning the protection window (if `--verbose-output`)
-5. **inside**: Count of fragment endpoints falling inside the protection window (if `--verbose-output`)
+4. **wps**: Window Protection Score (outside - inside)
+
+When using `--verbose-output`, additional columns are included:
+
+1. **chromosome**: Chromosome name
+2. **start**: Start position (0-based)
+3. **end**: End position (1-based)
+4. **outside**: Count of fragments fully spanning the protection window
+5. **inside**: Count of fragment endpoints falling inside the protection window
 6. **wps**: Window Protection Score (outside - inside)
 
 Example output:
+
+```
+1    1000    1001    12
+1    1001    1002    14
+1    1002    1003    10
+```
+
+With `--verbose-output`:
 
 ```
 1    1000    1001    15    3    12
@@ -141,7 +156,14 @@ optwps \
 ```bash
 optwps \
     -i high_coverage.bam \
-    -o regions_wps.tsv \
-    -r regions_of_interest.bed \
+    -o wps.tsv \
     --downsample 0.3
+```
+
+### Example 4: Creating Separate Output Files per Chromosome
+
+```bash
+optwps \
+    -i sample.bam \
+    -o "wps_{chrom}.tsv"
 ```
