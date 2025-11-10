@@ -14,7 +14,7 @@ keywords:
 - "BAM"
 - "sequencing"
 title: "optwps"
-version: "0.1.1"
-date-released: 2025-05-23
+version: "1.0.0"
+date-released: 2025-11-10
 license: "BSD-3-Clause"
 repository-code: "https://github.com/VasLem/optwps"

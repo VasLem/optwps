@@ -8,7 +8,7 @@ name = "optwps"
 description = "Fast Window Protection Score calculator for cell-free DNA analysis"
 readme = "README.md"
 requires-python = ">=3.7"
-license = {text = "BSD 3"}
+license = {text = "BSD"}
 authors = [
     {name = "Vasileios Lemonidis", email = "vaslemonidis@hotmail.com"},
 ]
@@ -29,7 +29,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
