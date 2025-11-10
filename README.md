@@ -60,6 +60,7 @@ optwps \
 - `--downsample`: Ratio to downsample reads (default OFF, optional)
 - `--chunk-size`: Chunk size for processing in pieces (default: 1e8)
 - `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
+- `--compute-coverage`: If provided, output will include base coverage
 - `--verbose-output`: If provided, output will include separate counts for 'outside' and 'inside' along with WPS
 
 ### Python API
