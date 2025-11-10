@@ -57,7 +57,7 @@ optwps \
 - `-w, --protection`: Base pair protection window (default: 120)
 - `--min-insert-size`: Minimum read length threshold to consider (optional)
 - `--max-insert-size`: Maximum read length threshold to consider (optional)
-- `--downsample`: Ratio to downsample reads (default OFF, optional)
+- `--downsample`: Ratio to downsample reads (optional)
 - `--chunk-size`: Chunk size for processing in pieces (default: 1e8)
 - `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
 - `--compute-coverage`: If provided, output will include base coverage
