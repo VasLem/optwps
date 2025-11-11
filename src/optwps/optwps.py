@@ -80,9 +80,9 @@ class ROIGenerator:
                 is provided to determine genome regions. Default: None
 
         Yields:
-            tuple: (chromosome, chunk_start, chunk_end, region_start, region_end)
+            tuple: (chromosome, chunk_start, chunk_end, region_id)
                 where chunk_start/chunk_end define the current chunk being processed
-                and region_start/region_end define the full original region boundaries
+                and region_id is either from the BED file or constructed from chrom/start/end.
 
         Raises:
             ValueError: If neither bed_file nor bam_file can provide regions
@@ -99,7 +99,7 @@ class ROIGenerator:
                 region_start = 0
                 while region_start < chrom_length:
                     region_end = min(region_start + self.chunk_size, chrom_length)
-                    yield chrom, region_start, region_end, 0, chrom_length
+                    yield chrom, region_start, region_end, chrom
                     region_start = region_end
                     iterator.update(1)
             iterator.close()
@@ -108,11 +108,16 @@ class ROIGenerator:
             nlines = sum(1 for _ in exopen(self.bed_file, "r"))
             with exopen(self.bed_file, "r") as bed:
                 for line in tqdm(bed, total=nlines, desc="Processing BED regions"):
-                    chrom, start, end = line.split()[:3]
+                    ret = line.strip().split("\t")
+                    chrom, start, end = ret[:3]
+                    try:
+                        region_id = ret[3]
+                    except IndexError:
+                        region_id = f"{chrom}_{start}_{end}"
                     chunk_start = int(start)
                     chunk_end = min(chunk_start + self.chunk_size, int(end))
                     while chunk_start < int(end):
-                        yield chrom, chunk_start, chunk_end, int(start), int(end)
+                        yield chrom, chunk_start, chunk_end, region_id
                         chunk_start = chunk_end
                         chunk_end = min(chunk_start + self.chunk_size, int(end))
 
@@ -244,9 +249,9 @@ class WPS:
 
         Args:
             bamfile (str): Path to input BAM file (must be sorted and indexed)
-            out_filepath (str): Path to output TSV file, or stdout (default).
+            out_filepath (str): Path to output TSV file, or stdout.
                 If it contains a formatting substring {target} or {chrom}, it will be used to create per-target  or
-                per-chromosome files. Both can be used together.
+                per-chromosome files. Default: None (stdout)
             downsample_ratio (float, optional): Fraction of reads to randomly keep
                 (0.0 to 1.0). Useful for high-coverage samples. Default: None (no downsampling)
             compute_coverage (bool, optional): Whether to compute and include base coverage
@@ -296,7 +301,7 @@ class WPS:
             except AttributeError:
                 pass
 
-        for chrom, start, end, total_start, total_end in self.roi_generator.regions(
+        for chrom, start, end, region_id in self.roi_generator.regions(
             bam_file=bamfile
         ):
             if "chr" in chrom:
@@ -433,7 +438,7 @@ class WPS:
             partial_outfile = None
             if use_partial_writer:
                 formatted_out_filepath = out_filepath.format(
-                    target=f"{chrom}_{total_start}_{total_end}",
+                    target=region_id,
                     chrom=chrom,
                 )
                 partial_outfile = partial_writers.get(
