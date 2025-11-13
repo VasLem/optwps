@@ -63,7 +63,6 @@ def test_multiple_outputs_with_target_placeholder(
     # Verify each target file has correct region data
     for line in bed_lines:
         chrom, start, end = line.strip().split()[:3]
-        chrom = chrom.replace("chr", "")
         if chrom not in ["1", "2", "X", "3", "4", "5"]:
             continue
 

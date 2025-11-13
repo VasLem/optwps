@@ -110,6 +110,7 @@ class ROIGenerator:
                 for line in tqdm(bed, total=nlines, desc="Processing BED regions"):
                     ret = line.strip().split("\t")
                     chrom, start, end = ret[:3]
+                    chrom = chrom.replace("chr", "")
                     try:
                         region_id = ret[3]
                     except IndexError:
@@ -239,6 +240,7 @@ class WPS:
         downsample_ratio=None,
         compute_coverage=False,
         verbose_output=False,
+        add_header=False,
     ):
         """
         Calculate Window Protection Score for all regions and write to file.
@@ -256,6 +258,7 @@ class WPS:
                 (0.0 to 1.0). Useful for high-coverage samples. Default: None (no downsampling)
             compute_coverage (bool, optional): Whether to compute and include base coverage
             verbose_output (bool, optional): Whether to include detailed counts
+            add_header (bool, optional): Whether to add header to the output
 
         Returns:
             None: Results are written directly to out_filepath
@@ -294,6 +297,7 @@ class WPS:
         use_partial_writer = "{target}" in out_filepath or "{chrom}" in out_filepath
         partial_writers = dict()
         total_outfile = None
+        header_added = set()
         if not use_partial_writer:
             total_outfile = CMWriterUnpacker(exopen(out_filepath, "w"))
             try:
@@ -452,6 +456,7 @@ class WPS:
                     partial_outfile = partial_outfile.__enter__()
                 except AttributeError:
                     pass
+
             outfile = partial_outfile if use_partial_writer else total_outfile
             st = np.arange(regionStart, regionEnd + 1)
             en = st + 1  # add end coordinate
@@ -462,7 +467,11 @@ class WPS:
                 df["outside"] = outside_cum
                 df["inside"] = inside_cum
             df["wps"] = wps
-            df.to_csv(outfile, sep="\t", header=False, index=False)
+            header = False
+            if add_header and outfile not in header_added:
+                header_added.add(outfile)
+                header = True
+            df.to_csv(outfile, sep="\t", header=header, index=False)
 
         if use_partial_writer:
             for writer in partial_writers.values():
@@ -552,6 +561,12 @@ def main():
         help="If provided, output will include separate counts for 'outside' and 'inside' along with WPS.",
         action="store_true",
     )
+    parser.add_argument(
+        "--add-header",
+        dest="add_header",
+        help="If provided, output files will include a header line.",
+        action="store_true",
+    )
     args = parser.parse_args()
     valid_chroms = None
     if args.valid_chroms == "canonical":
@@ -572,6 +587,7 @@ def main():
         downsample_ratio=args.downsample,
         compute_coverage=args.compute_coverage,
         verbose_output=args.verbose_output,
+        add_header=args.add_header,
     )
 
 

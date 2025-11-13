@@ -63,6 +63,7 @@ optwps \
 - `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
 - `--compute-coverage`: If provided, output will include base coverage
 - `--verbose-output`: If provided, output will include separate counts for 'outside' and 'inside' along with WPS
+- `--add-header`: If provided, output file(s) will have headers
 
 ### Python API
 

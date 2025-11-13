@@ -311,3 +311,22 @@ def test_printed_to_stdout(
     for line in lines:
         cols = line.split("\t")
         assert len(cols) == 6  # chrom, pos_start, pos_end, gcount, bcount, wps
+
+
+def test_with_header(make_test_bed_file, make_test_bam_file_paired, tmp_path, capsys):
+    from optwps import WPS
+
+    tmp_output = tmp_path / "wps_output_with_header.tsv"
+
+    maker = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+    )
+    maker.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=str(tmp_output),
+        add_header=True,
+    )
+    contents = open(tmp_output, "r").read()
+    assert contents.startswith("#chrom\tstart\tend\twps\n")
