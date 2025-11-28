@@ -13,8 +13,6 @@ A high-performance Python package for computing Window Protection Score (WPS) fr
 
 ## Installation
 
-### From Source
-
 ```bash
 pip install optwps
 ```
