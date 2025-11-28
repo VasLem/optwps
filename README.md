@@ -20,6 +20,7 @@ pip install optwps
 ### Dependencies
 
 - Python >= 3.7
+- samtools
 - pysam
 - pandas
 - pigz
