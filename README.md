@@ -21,11 +21,6 @@ pip install optwps
 
 - Python >= 3.7
 - samtools
-- pysam
-- pandas
-- pigz
-- tqdm
-- bx-python
 
 ## Usage
 
