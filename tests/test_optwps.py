@@ -197,6 +197,27 @@ def test_optwps_downsampling(
     assert len(lines) > 0  # Just check that some output is produced
 
 
+def test_optwps_with_parallelism(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    maker = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+        njobs=2,
+    )
+    tmp_output = tmp_path / "wps_output_parallel.tsv"
+    tmp_output = str(tmp_output)
+    maker.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=tmp_output,
+    )
+    lines = open(tmp_output).readlines()
+    assert len(lines) > 0  # Just check that some output is produced
+
+
 def test_optwps_no_bed_file(make_test_bam_file_paired, tmp_path):
     from optwps import WPS
 
