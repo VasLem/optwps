@@ -43,6 +43,7 @@ dependencies = [
     "bx-python",
     "pigz",
     "tqdm",
+    "joblib",
     "pandas",
 ]
 
