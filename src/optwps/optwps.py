@@ -45,6 +45,7 @@ import pysam
 import random
 import numpy as np
 import pandas as pd
+import joblib
 
 from optwps.utils import exopen, is_soft_clipped, ref_aln_length
 from tqdm.auto import tqdm
@@ -186,6 +187,8 @@ class WPS:
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
             Default: 1e8 (100 Mb)
+        njobs (int, optional): Number of threads to use for input bam file decompression. If negative, uses
+            (number of CPUs + njobs). Default: 1
 
     Attributes:
         bed_file (str): Path to BED file or None
@@ -218,6 +221,7 @@ class WPS:
         max_insert_size=None,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
+        njobs=1,
     ):
         self.bed_file = bed_file
         self.protection_size = protection_size // 2
@@ -228,6 +232,9 @@ class WPS:
         self.min_insert_size = min_insert_size
         self.max_insert_size = max_insert_size
         self.chunk_size = chunk_size
+        self.njobs = njobs
+        if self.njobs < 0:
+            self.njobs = joblib.cpu_count() + self.njobs
         self.roi_generator = ROIGenerator(bed_file=self.bed_file)
 
     def __call__(self, *args, **kwargs):
@@ -290,7 +297,7 @@ class WPS:
         """
         if out_filepath is None:
             out_filepath = "stdout"
-        input_file = pysam.Samfile(bamfile, "rb")
+        input_file = pysam.Samfile(bamfile, "rb", threads=self.njobs)
         prefix = (
             "chr" if any(r.startswith("chr") for r in input_file.references) else ""
         )
@@ -567,6 +574,13 @@ def main():
         help="If provided, output files will include a header line.",
         action="store_true",
     )
+    parser.add_argument(
+        "--njobs",
+        dest="njobs",
+        help="Number of threads to use for input bam file decompression. If negative, uses (number of CPUs + njobs). Default: 1",
+        default=1,
+        type=int,
+    )
     args = parser.parse_args()
     valid_chroms = None
     if args.valid_chroms == "canonical":
@@ -580,6 +594,7 @@ def main():
         max_insert_size=args.max_insert_size,
         chunk_size=args.chunk_size,
         valid_chroms=valid_chroms,
+        njobs=args.njobs,
     )
     optwps.run(
         bamfile=args.input,

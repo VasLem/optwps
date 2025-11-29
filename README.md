@@ -82,7 +82,7 @@ wps_calculator.run(
 
 ## Output Format
 
-The output is a tab-separated no-header file with the following columns:
+The output is a tab-separated no-header (unless `--add-header` is specified) file with the following columns:
 
     - Chromosome name (without 'chr' prefix)
     - Start position (0-based)
