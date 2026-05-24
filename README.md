@@ -11,6 +11,28 @@ A high-performance Python package for computing Window Protection Score (WPS) fr
 
 `optwps` is a fast and efficient tool for calculating Window Protection Scores from aligned sequencing reads. WPS is a metric used in cell-free DNA analysis to identify nucleosome positioning and protected regions by analyzing fragment coverage patterns.
 
+## Performance
+
+The plot below compares the legacy implementation used in the regression tests with `optwps` while increasing only the synthetic BAM size. The benchmark uses a fixed 2,000 bp BED target, varies the number of paired-end reads in the BAM, plots the mean runtime with standard-deviation error bars, and verifies that both implementations produce identical TSV output.
+
+![Speed comparison between the old implementation and optwps](benchmarks/input_bam_size_comparison.svg)
+
+The plot below keeps each targeted BED region fixed at 2,000 bp and varies only the number of such regions.
+
+![Speed comparison by number of targeted BED regions](benchmarks/region_count_comparison.svg)
+
+The plot below keeps the synthetic BAM size fixed at 10,000 bp and varies only the size of one targeted BED region.
+
+![Speed comparison by targeted BED region size](benchmarks/target_size_comparison.svg)
+
+Recreate the plots with:
+
+```bash
+python benchmarks/plot_input_bam_size_comparison.py
+python benchmarks/plot_region_count_comparison.py
+python benchmarks/plot_target_size_comparison.py
+```
+
 ## Installation
 
 ```bash
@@ -39,8 +61,8 @@ optwps \
     -i input.bam \
     -o output.tsv \
     -w 120 \
-    --min_insert_size 120 \
-    --max_insert_size 180 \
+    --min-insert-size 120 \
+    --max-insert-size 180 \
     --downsample 0.5
 ```
 
