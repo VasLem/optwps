@@ -8,7 +8,6 @@ _open = open
 
 import os
 import sys
-import pigz
 import gzip
 
 from contextlib import nullcontext
@@ -48,13 +47,12 @@ def ref_aln_length(cigar):
     return sum(l for op, l in cigar if op in (0, 2, 3, 7, 8))
 
 
-def exopen(fil: str, mode: str = "r", *args, use_pigz=True, njobs=-1, **kwargs):
+def exopen(fil: str, mode: str = "r", *args, njobs=-1, **kwargs):
     """
     Open a file with automatic gzip support and parallel compression.
 
     This function wraps the standard open() function with automatic detection
-    and handling of gzipped files. When writing gzipped files, parallel compression
-    (pigz) can be used for better performance on multi-core systems. Also supports
+    and handling of gzipped files. Also supports
     writing to stdout when fil='stdout'.
 
     Args:
@@ -62,9 +60,6 @@ def exopen(fil: str, mode: str = "r", *args, use_pigz=True, njobs=-1, **kwargs):
         mode (str, optional): File open mode ('r', 'w', 'rb', 'wb', etc.).
             Default: 'r'
         *args: Additional positional arguments passed to open function
-        use_pigz (bool, optional): Whether to use pigz for parallel gzip compression.
-            Falls back to standard gzip when pigz is unavailable or when handling
-            multiple concurrent writers. Default: True
         njobs (int, optional): Number of parallel jobs for gzip compression.
             If -1, uses all available CPU cores. Default: -1
         **kwargs: Additional keyword arguments passed to open function
@@ -78,7 +73,7 @@ def exopen(fil: str, mode: str = "r", *args, use_pigz=True, njobs=-1, **kwargs):
         assert "r" not in mode, "Cannot open stdout in read mode"
         return nullcontext(sys.stdout)
     if fil.endswith(".gz"):
-        open_func = pigz.open if use_pigz else gzip.open
+        open_func = gzip.open
         try:
             return open_func(
                 fil, mode + "t" if not mode.endswith("b") else mode, *args, **kwargs

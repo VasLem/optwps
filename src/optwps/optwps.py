@@ -454,9 +454,7 @@ class WPS:
                 )
                 partial_outfile = partial_writers.get(
                     formatted_out_filepath,
-                    CMWriterUnpacker(
-                        exopen(formatted_out_filepath, "w", use_pigz=False)
-                    ),
+                    CMWriterUnpacker(exopen(formatted_out_filepath, "w")),
                 )
                 partial_writers[formatted_out_filepath] = partial_outfile
                 try:

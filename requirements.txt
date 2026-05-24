@@ -2,5 +2,4 @@ pysam
 numpy
 bx-python
 pytest
-pigz
 tqdm
