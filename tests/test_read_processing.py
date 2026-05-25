@@ -6,6 +6,7 @@ from optwps.read_processing import (
     collect_fragment_features,
     collect_fragment_intervals,
     iter_pysam_reads,
+    process_read_batches,
     read_info_batches,
     valid_read_info,
     weight_from_features,
@@ -63,6 +64,26 @@ def test_read_info_batches_splits_and_flushes_tail():
     batches = list(read_info_batches([_read(pos=i) for i in range(3)], 2))
 
     assert [[read.pos for read in batch] for batch in batches] == [[0, 1], [2]]
+
+
+def test_process_read_batches_does_not_drain_input_before_yielding():
+    consumed = 0
+
+    def batches():
+        nonlocal consumed
+        for i in range(5):
+            consumed += 1
+            yield [i]
+
+    processed = process_read_batches(
+        batches(),
+        njobs=2,
+        batch_func=list,
+        max_queued_batches=2,
+    )
+
+    assert next(processed) == [0]
+    assert consumed == 2
 
 
 def test_valid_read_info_filter_branches(monkeypatch):

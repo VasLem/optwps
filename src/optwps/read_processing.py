@@ -239,14 +239,26 @@ def valid_fragment_intervals_batch(
     return starts, ends, weights
 
 
-def process_read_batches(batches, njobs, batch_func, **kwargs):
+def process_read_batches(batches, njobs, batch_func, max_queued_batches=None, **kwargs):
     if njobs == 1:
         for batch in batches:
             yield batch_func(batch, **kwargs)
     else:
-        yield from joblib.Parallel(n_jobs=njobs)(
-            joblib.delayed(batch_func)(batch, **kwargs) for batch in batches
-        )
+        max_queued_batches = max_queued_batches or max(1, njobs * 2)
+        queued = []
+        for batch in batches:
+            queued.append(batch)
+            if len(queued) >= max_queued_batches:
+                yield from joblib.Parallel(n_jobs=njobs)(
+                    joblib.delayed(batch_func)(queued_batch, **kwargs)
+                    for queued_batch in queued
+                )
+                queued = []
+        if queued:
+            yield from joblib.Parallel(n_jobs=njobs)(
+                joblib.delayed(batch_func)(queued_batch, **kwargs)
+                for queued_batch in queued
+            )
 
 
 def collect_fragment_features(
@@ -257,7 +269,6 @@ def collect_fragment_features(
     min_mappability_threshold=0.9,
     downsample_ratio=None,
     njobs=1,
-    read_buffer_size=10000,
 ):
     return [
         feature
@@ -287,7 +298,6 @@ def collect_fragment_intervals(
     weight_values=None,
     use_weights=False,
     njobs=1,
-    read_buffer_size=10000,
 ):
     starts, ends, weights = [], [], []
     for read_starts, read_ends, read_weights in process_read_batches(

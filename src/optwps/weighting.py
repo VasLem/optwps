@@ -7,7 +7,7 @@ from .read_processing import (
     collect_fragment_features,
     fragment_features,
     iter_pysam_reads,
-    read_info,
+    read_info_batches,
     weight_from_features,
 )
 
@@ -59,24 +59,14 @@ class WeightsCalculator:
                 else pysam.AlignmentFile(bam, "rb", threads=self.njobs)
             )
             close_bam = True
-        read_batches = []
-        batch = []
-        for read in iter_pysam_reads(bam.fetch()):
-            batch.append(read_info(read))
-            if len(batch) >= self.read_buffer_size:
-                read_batches.append(batch)
-                batch = []
-        if batch:
-            read_batches.append(batch)
         features = collect_fragment_features(
-            read_batches,
+            read_info_batches(iter_pysam_reads(bam.fetch()), self.read_buffer_size),
             min_insert_size=self.min_insert_size,
             max_insert_size=self.max_insert_size,
             mappability_path=self.mappability_file,
             min_mappability_threshold=self.min_mappability_threshold,
             downsample_ratio=self.subsample,
             njobs=self.njobs,
-            read_buffer_size=self.read_buffer_size,
         )
         if close_bam:
             bam.close()

@@ -50,7 +50,7 @@ from .read_processing import (
     collect_fragment_intervals,
     fragment_interval,
     iter_pysam_reads,
-    read_info,
+    read_info_batches,
 )
 from .read_validator import ReadValidator
 from .weighting import WeightsCalculator
@@ -421,17 +421,8 @@ class WPS:
                 self.weights_calculator, WeightsCalculator
             )
             if can_parallel_reads:
-                read_batches = []
-                batch = []
-                for read in iter_pysam_reads(reads):
-                    batch.append(read_info(read))
-                    if len(batch) >= self.read_buffer_size:
-                        read_batches.append(batch)
-                        batch = []
-                if batch:
-                    read_batches.append(batch)
                 starts, ends, weights = collect_fragment_intervals(
-                    read_batches,
+                    read_info_batches(iter_pysam_reads(reads), self.read_buffer_size),
                     min_insert_size=self.min_insert_size,
                     max_insert_size=self.max_insert_size,
                     mappability_path=self.mappability_file,
@@ -442,7 +433,6 @@ class WPS:
                     weight_values=getattr(self.weights_calculator, "weights", None),
                     use_weights=self.weights_calculator is not None,
                     njobs=self.njobs,
-                    read_buffer_size=self.read_buffer_size,
                 )
             else:
                 for read in iter_pysam_reads(reads):
