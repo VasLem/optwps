@@ -13,6 +13,7 @@ def old_implementation(
     valid_chroms,
     min_insert_size,
     max_insert_size,
+    njobs=1,
 ):
     protection = protection_size // 2
     with exopen(bed_file, "r") as infile:
@@ -28,7 +29,7 @@ def old_implementation(
 
             filteredReads = Intersecter()
 
-            input_file = pysam.Samfile(bamfile, "rb")
+            input_file = pysam.Samfile(bamfile, "rb", threads=njobs)
             prefix = ""
             for tchrom in input_file.references:
                 if tchrom.startswith("chr"):
@@ -203,20 +204,29 @@ def test_optwps_with_parallelism(
 ):
     from optwps import WPS
 
-    maker = WPS(
+    serial = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+    )
+    parallel = WPS(
         bed_file=str(make_test_bed_file),
         protection_size=120,
         valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
         njobs=2,
+        read_buffer_size=2,
     )
-    tmp_output = tmp_path / "wps_output_parallel.tsv"
-    tmp_output = str(tmp_output)
-    maker.run(
+    serial_output = str(tmp_path / "wps_output_serial.tsv")
+    parallel_output = str(tmp_path / "wps_output_parallel.tsv")
+    serial.run(
         bamfile=str(make_test_bam_file_paired),
-        out_filepath=tmp_output,
+        out_filepath=serial_output,
     )
-    lines = open(tmp_output).readlines()
-    assert len(lines) > 0  # Just check that some output is produced
+    parallel.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=parallel_output,
+    )
+    assert open(parallel_output).readlines() == open(serial_output).readlines()
 
 
 def test_optwps_no_bed_file(make_test_bam_file_paired, tmp_path):
@@ -439,3 +449,32 @@ def test_bias_correction_runs_with_estimated_weights(
     )
 
     assert len(_read_verbose_wps(output)) > 0
+
+
+def test_parallel_bias_correction_matches_serial(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    kwargs = dict(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+        correct_for_bias=True,
+        bias_bins=2,
+        bias_subsample=1.0,
+    )
+    serial_output = str(tmp_path / "bias_corrected_serial.tsv")
+    parallel_output = str(tmp_path / "bias_corrected_parallel.tsv")
+    WPS(**kwargs).run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=serial_output,
+        verbose_output=True,
+    )
+    WPS(**kwargs, njobs=2, read_buffer_size=2).run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=parallel_output,
+        verbose_output=True,
+    )
+
+    assert _read_verbose_wps(parallel_output) == _read_verbose_wps(serial_output)

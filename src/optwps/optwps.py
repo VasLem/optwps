@@ -46,9 +46,10 @@ import numpy as np
 import pandas as pd
 import joblib
 
+from .read_processing import collect_fragment_intervals, fragment_interval
 from .read_validator import ReadValidator
 from .weighting import WeightsCalculator
-from .utils import exopen, ref_aln_length
+from .utils import exopen
 from tqdm.auto import tqdm
 
 
@@ -66,9 +67,12 @@ class ROIGenerator:
             Default: 1e8 (100 megabases)
     """
 
-    def __init__(self, bed_file=None, chunk_size=1e8):
+    def __init__(self, bed_file=None, chunk_size=1e8, njobs=1):
         self.bed_file = bed_file
         self.chunk_size = chunk_size
+        self.njobs = njobs
+        if self.njobs < 0:
+            self.njobs = joblib.cpu_count() + self.njobs
 
     def regions(self, bam_file=None):
         """
@@ -90,7 +94,7 @@ class ROIGenerator:
             ValueError: If neither bed_file nor bam_file can provide regions
         """
         if (self.bed_file is None) or (not os.path.exists(self.bed_file)):
-            input_file = pysam.Samfile(bam_file, "rb")
+            input_file = pysam.Samfile(bam_file, "rb", threads=self.njobs)
             nchunks = sum(
                 (input_file.get_reference_length(chrom) - 1) // self.chunk_size + 1
                 for chrom in input_file.references
@@ -198,8 +202,11 @@ class WPS:
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
             Default: 1e8 (100 Mb)
-        njobs (int, optional): Number of threads to use for input bam file decompression. If negative, uses
-            (number of CPUs + njobs). Default: 1
+        read_buffer_size (int, optional): Number of reads sent to each worker task.
+            Default: 10000
+        njobs (int, optional): Number of jobs to use for read processing and input
+            BAM decompression. If negative, uses (number of CPUs + njobs).
+            Default: 1
 
     Attributes:
         bed_file (str): Path to BED file or None
@@ -241,6 +248,7 @@ class WPS:
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
         njobs=1,
+        read_buffer_size=10000,
     ):
         self.bed_file = bed_file
         self.mappability_file = mappability_file
@@ -256,8 +264,9 @@ class WPS:
         self.njobs = njobs
         if self.njobs < 0:
             self.njobs = joblib.cpu_count() + self.njobs
+        self.read_buffer_size = read_buffer_size
         self.roi_generator = ROIGenerator(
-            bed_file=self.bed_file, chunk_size=self.chunk_size
+            bed_file=self.bed_file, chunk_size=self.chunk_size, njobs=self.njobs
         )
         self.read_validator = ReadValidator(
             min_insert_size=self.min_insert_size,
@@ -273,6 +282,8 @@ class WPS:
                 min_insert_size=self.min_insert_size,
                 max_insert_size=self.max_insert_size,
                 min_mappability_threshold=self.min_mappability,
+                njobs=self.njobs,
+                read_buffer_size=self.read_buffer_size,
             )
             if correct_for_bias
             else None
@@ -371,34 +382,45 @@ class WPS:
             starts = []
             ends = []
             weights = []
-            for read in input_file.fetch(
+            reads = input_file.fetch(
                 prefix + chrom,
                 max(0, regionStart - self.protection_size - 1),
                 regionEnd + self.protection_size + 1,
-            ):
-
-                if not self.read_validator.valid_read(
-                    read,
+            )
+            can_parallel_reads = (
+                self.weights_calculator is None
+                or isinstance(self.weights_calculator, WeightsCalculator)
+            )
+            if can_parallel_reads:
+                starts, ends, weights = collect_fragment_intervals(
+                    reads,
+                    min_insert_size=self.min_insert_size,
+                    max_insert_size=self.max_insert_size,
+                    mappability_path=self.mappability_file,
+                    min_mappability_threshold=self.min_mappability,
                     upstream_limit=regionStart - self.protection_size - 1,
                     downsample_ratio=downsample_ratio,
-                ):
-                    continue
+                    bin_edges=getattr(self.weights_calculator, "bin_edges", None),
+                    weight_values=getattr(self.weights_calculator, "weights", None),
+                    use_weights=self.weights_calculator is not None,
+                    njobs=self.njobs,
+                    read_buffer_size=self.read_buffer_size,
+                )
+            else:
+                for read in reads:
+                    if not self.read_validator.valid_read(
+                        read,
+                        upstream_limit=regionStart - self.protection_size - 1,
+                        downsample_ratio=downsample_ratio,
+                    ):
+                        continue
 
-                if read.is_paired:
-                    lseq = abs(read.isize)
-                    rstart = min(read.pos, read.pnext)
-                    rend = rstart + lseq - 1
+                    rstart, rend = fragment_interval(read)
                     starts.append(rstart)
                     ends.append(rend)
-                else:
-                    rstart = read.pos
-                    lseq = ref_aln_length(read.cigartuples)
-                    rend = rstart + lseq - 1  # end included
-                    starts.append(rstart)
-                    ends.append(rend)
-                if self.weights_calculator is not None:
-                    weight = self.weights_calculator.transform(read)
-                    weights.append(weight)
+                    if self.weights_calculator is not None:
+                        weight = self.weights_calculator.transform(read)
+                        weights.append(weight)
             n = regionEnd - regionStart + 1
             if len(starts) > 0:
                 starts = np.array(starts)
@@ -640,8 +662,15 @@ def main():
     parser.add_argument(
         "--njobs",
         dest="njobs",
-        help="Number of threads to use for input bam file decompression. If negative, uses (number of CPUs + njobs). Default: 1",
+        help="Number of jobs to use for read processing and input BAM decompression. If negative, uses (number of CPUs + njobs). Default: 1",
         default=1,
+        type=int,
+    )
+    parser.add_argument(
+        "--read-buffer-size",
+        dest="read_buffer_size",
+        help="Number of reads sent to each worker task when --njobs is not 1. Default: 10000",
+        default=10000,
         type=int,
     )
     args = parser.parse_args()
@@ -663,6 +692,7 @@ def main():
         chunk_size=args.chunk_size,
         valid_chroms=valid_chroms,
         njobs=args.njobs,
+        read_buffer_size=args.read_buffer_size,
     )
     optwps.run(
         bamfile=args.input,
