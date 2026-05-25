@@ -44,7 +44,7 @@ class WeightsCalculator:
         self.bin_edges = None
         self.weights = None
 
-    def fit(self, bam: Union[str, pysam.AlignmentFile], y=None):
+    def fit(self, bam: Union[str, pysam.AlignmentFile]):
         close_bam = False
         if isinstance(bam, str):
             bam = (
