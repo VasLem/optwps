@@ -46,7 +46,12 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from .read_processing import collect_fragment_intervals, fragment_interval
+from .read_processing import (
+    collect_fragment_intervals,
+    fragment_interval,
+    iter_pysam_reads,
+    read_info,
+)
 from .read_validator import ReadValidator
 from .weighting import WeightsCalculator
 from .utils import exopen
@@ -73,6 +78,7 @@ class ROIGenerator:
         self.njobs = njobs
         if self.njobs < 0:
             self.njobs = joblib.cpu_count() + self.njobs
+        self.njobs = max(1, self.njobs)
 
     def regions(self, bam_file=None):
         """
@@ -94,7 +100,11 @@ class ROIGenerator:
             ValueError: If neither bed_file nor bam_file can provide regions
         """
         if (self.bed_file is None) or (not os.path.exists(self.bed_file)):
-            input_file = pysam.Samfile(bam_file, "rb", threads=self.njobs)
+            input_file = (
+                pysam.Samfile(bam_file, "rb")
+                if self.njobs == 1
+                else pysam.Samfile(bam_file, "rb", threads=self.njobs)
+            )
             nchunks = sum(
                 (input_file.get_reference_length(chrom) - 1) // self.chunk_size + 1
                 for chrom in input_file.references
@@ -247,7 +257,7 @@ class WPS:
         bias_subsample=0.05,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
-        njobs=-1,
+        njobs=1,
         read_buffer_size=10000,
     ):
         self.bed_file = bed_file
@@ -264,6 +274,7 @@ class WPS:
         self.njobs = njobs
         if self.njobs < 0:
             self.njobs = joblib.cpu_count() + self.njobs
+        self.njobs = max(1, self.njobs)
         self.read_buffer_size = read_buffer_size
         self.roi_generator = ROIGenerator(
             bed_file=self.bed_file, chunk_size=self.chunk_size, njobs=self.njobs
@@ -349,7 +360,11 @@ class WPS:
         """
         if out_filepath is None:
             out_filepath = "stdout"
-        input_file = pysam.Samfile(bamfile, "rb", threads=self.njobs)
+        input_file = (
+            pysam.Samfile(bamfile, "rb")
+            if self.njobs == 1
+            else pysam.Samfile(bamfile, "rb", threads=self.njobs)
+        )
         prefix = (
             "chr" if any(r.startswith("chr") for r in input_file.references) else ""
         )
@@ -391,8 +406,17 @@ class WPS:
                 self.weights_calculator, WeightsCalculator
             )
             if can_parallel_reads:
+                read_batches = []
+                batch = []
+                for read in iter_pysam_reads(reads):
+                    batch.append(read_info(read))
+                    if len(batch) >= self.read_buffer_size:
+                        read_batches.append(batch)
+                        batch = []
+                if batch:
+                    read_batches.append(batch)
                 starts, ends, weights = collect_fragment_intervals(
-                    reads,
+                    read_batches,
                     min_insert_size=self.min_insert_size,
                     max_insert_size=self.max_insert_size,
                     mappability_path=self.mappability_file,
@@ -406,7 +430,7 @@ class WPS:
                     read_buffer_size=self.read_buffer_size,
                 )
             else:
-                for read in reads:
+                for read in iter_pysam_reads(reads):
                     if not self.read_validator.valid_read(
                         read,
                         upstream_limit=regionStart - self.protection_size - 1,
@@ -661,8 +685,8 @@ def main():
     parser.add_argument(
         "--njobs",
         dest="njobs",
-        help="Number of jobs to use for read processing and input BAM decompression. If negative, uses (number of CPUs + njobs). Default: -1",
-        default=-1,
+        help="Number of jobs to use for read processing and input BAM decompression. If negative, uses (number of CPUs + njobs). Default: 1",
+        default=1,
         type=int,
     )
     parser.add_argument(

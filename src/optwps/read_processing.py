@@ -67,6 +67,18 @@ def read_info_batches(reads, buffer_size):
         yield batch
 
 
+def iter_pysam_reads(reads):
+    while True:
+        try:
+            yield next(reads)
+        except StopIteration:
+            return
+        except ValueError as error:
+            if "Firing event 10 with no exception set" not in str(error):
+                raise
+            return
+
+
 def valid_read_info(
     read,
     min_insert_size=None,
@@ -227,8 +239,7 @@ def valid_fragment_intervals_batch(
     return starts, ends, weights
 
 
-def process_read_batches(reads, buffer_size, njobs, batch_func, **kwargs):
-    batches = read_info_batches(reads, buffer_size)
+def process_read_batches(batches, njobs, batch_func, **kwargs):
     if njobs == 1:
         for batch in batches:
             yield batch_func(batch, **kwargs)
@@ -239,20 +250,19 @@ def process_read_batches(reads, buffer_size, njobs, batch_func, **kwargs):
 
 
 def collect_fragment_features(
-    reads,
+    batches,
     min_insert_size=None,
     max_insert_size=None,
     mappability_path=None,
     min_mappability_threshold=0.9,
     downsample_ratio=None,
-    njobs=-1,
+    njobs=1,
     read_buffer_size=10000,
 ):
     return [
         feature
         for batch in process_read_batches(
-            reads,
-            read_buffer_size,
+            batches,
             njobs,
             valid_fragment_features_batch,
             min_insert_size=min_insert_size,
@@ -266,7 +276,7 @@ def collect_fragment_features(
 
 
 def collect_fragment_intervals(
-    reads,
+    batches,
     min_insert_size=None,
     max_insert_size=None,
     mappability_path=None,
@@ -276,13 +286,12 @@ def collect_fragment_intervals(
     bin_edges=None,
     weight_values=None,
     use_weights=False,
-    njobs=-1,
+    njobs=1,
     read_buffer_size=10000,
 ):
     starts, ends, weights = [], [], []
     for read_starts, read_ends, read_weights in process_read_batches(
-        reads,
-        read_buffer_size,
+        batches,
         njobs,
         valid_fragment_intervals_batch,
         min_insert_size=min_insert_size,

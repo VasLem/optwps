@@ -6,6 +6,8 @@ import joblib
 from .read_processing import (
     collect_fragment_features,
     fragment_features,
+    iter_pysam_reads,
+    read_info,
     weight_from_features,
 )
 
@@ -27,7 +29,7 @@ class WeightsCalculator:
         min_insert_size=None,
         max_insert_size=None,
         min_mappability_threshold=0.9,
-        njobs=-1,
+        njobs=1,
         read_buffer_size=10000,
     ):
         self.subsample = subsample
@@ -37,6 +39,7 @@ class WeightsCalculator:
         self.max_insert_size = max_insert_size
         self.min_mappability_threshold = min_mappability_threshold
         self.njobs = joblib.cpu_count() + njobs if njobs < 0 else njobs
+        self.njobs = max(1, self.njobs)
         self.read_buffer_size = read_buffer_size
         self.bin_edges = None
         self.weights = None
@@ -44,10 +47,23 @@ class WeightsCalculator:
     def fit(self, bam: Union[str, pysam.AlignmentFile], y=None):
         close_bam = False
         if isinstance(bam, str):
-            bam = pysam.AlignmentFile(bam, "rb", threads=self.njobs)
+            bam = (
+                pysam.AlignmentFile(bam, "rb")
+                if self.njobs == 1
+                else pysam.AlignmentFile(bam, "rb", threads=self.njobs)
+            )
             close_bam = True
+        read_batches = []
+        batch = []
+        for read in iter_pysam_reads(bam.fetch()):
+            batch.append(read_info(read))
+            if len(batch) >= self.read_buffer_size:
+                read_batches.append(batch)
+                batch = []
+        if batch:
+            read_batches.append(batch)
         features = collect_fragment_features(
-            bam.fetch(),
+            read_batches,
             min_insert_size=self.min_insert_size,
             max_insert_size=self.max_insert_size,
             mappability_path=self.mappability_file,

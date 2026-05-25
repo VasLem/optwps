@@ -2,6 +2,7 @@ import pysam
 import pytest
 
 from optwps import exopen, is_soft_clipped, ref_aln_length
+from optwps.read_processing import iter_pysam_reads
 from bx.intervals import Intersecter, Interval
 
 
@@ -29,17 +30,23 @@ def old_implementation(
 
             filteredReads = Intersecter()
 
-            input_file = pysam.Samfile(bamfile, "rb", threads=njobs)
+            input_file = (
+                pysam.Samfile(bamfile, "rb")
+                if njobs == 1
+                else pysam.Samfile(bamfile, "rb", threads=njobs)
+            )
             prefix = ""
             for tchrom in input_file.references:
                 if tchrom.startswith("chr"):
                     prefix = "chr"
                     break
 
-            for read in input_file.fetch(
-                prefix + chrom,
-                max(0, regionStart - protection - 1),
-                regionEnd + protection + 1,
+            for read in iter_pysam_reads(
+                input_file.fetch(
+                    prefix + chrom,
+                    max(0, regionStart - protection - 1),
+                    regionEnd + protection + 1,
+                )
             ):
                 if read.is_duplicate or read.is_qcfail or read.is_unmapped:
                     continue
