@@ -9,7 +9,7 @@ A high-performance Python package for computing Window Protection Score (WPS) fr
 
 ## Performance
 
-The plot below compares the legacy implementation used in the regression tests with `optwps` while increasing only the synthetic BAM size. The benchmark uses a fixed 2,000 bp BED target, varies the number of paired-end reads in the BAM, plots the mean runtime with standard-deviation error bars, and verifies that both implementations produce identical TSV output.
+The plot below compares the legacy implementation used in the regression tests with `optwps` while increasing only the synthetic BAM size. To only assess the algorithmic change, a single job was used (`--njobs 1`). The benchmark uses a fixed 2,000 bp BED target, varies the number of paired-end reads in the BAM, plots the mean runtime with standard-deviation error bars, and verifies that both implementations produce identical TSV output.
 
 ![Speed comparison between the old implementation and optwps](benchmarks/input_bam_size_comparison.svg)
 

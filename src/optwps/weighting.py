@@ -27,7 +27,7 @@ class WeightsCalculator:
         min_insert_size=None,
         max_insert_size=None,
         min_mappability_threshold=0.9,
-        njobs=1,
+        njobs=-1,
         read_buffer_size=10000,
     ):
         self.subsample = subsample

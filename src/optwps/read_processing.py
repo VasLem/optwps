@@ -220,9 +220,7 @@ def valid_fragment_intervals_batch(
             ends.append(end)
             if use_weights:
                 features = fragment_features(read)
-                weights.append(
-                    weight_from_features(features, bin_edges, weight_values)
-                )
+                weights.append(weight_from_features(features, bin_edges, weight_values))
     finally:
         if mappability_file is not None:
             mappability_file.close()
@@ -247,7 +245,7 @@ def collect_fragment_features(
     mappability_path=None,
     min_mappability_threshold=0.9,
     downsample_ratio=None,
-    njobs=1,
+    njobs=-1,
     read_buffer_size=10000,
 ):
     return [
@@ -278,7 +276,7 @@ def collect_fragment_intervals(
     bin_edges=None,
     weight_values=None,
     use_weights=False,
-    njobs=1,
+    njobs=-1,
     read_buffer_size=10000,
 ):
     starts, ends, weights = [], [], []

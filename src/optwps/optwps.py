@@ -206,7 +206,7 @@ class WPS:
             Default: 10000
         njobs (int, optional): Number of jobs to use for read processing and input
             BAM decompression. If negative, uses (number of CPUs + njobs).
-            Default: 1
+            Default: -1
 
     Attributes:
         bed_file (str): Path to BED file or None
@@ -247,7 +247,7 @@ class WPS:
         bias_subsample=0.05,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
-        njobs=1,
+        njobs=-1,
         read_buffer_size=10000,
     ):
         self.bed_file = bed_file
@@ -387,9 +387,8 @@ class WPS:
                 max(0, regionStart - self.protection_size - 1),
                 regionEnd + self.protection_size + 1,
             )
-            can_parallel_reads = (
-                self.weights_calculator is None
-                or isinstance(self.weights_calculator, WeightsCalculator)
+            can_parallel_reads = self.weights_calculator is None or isinstance(
+                self.weights_calculator, WeightsCalculator
             )
             if can_parallel_reads:
                 starts, ends, weights = collect_fragment_intervals(
@@ -662,8 +661,8 @@ def main():
     parser.add_argument(
         "--njobs",
         dest="njobs",
-        help="Number of jobs to use for read processing and input BAM decompression. If negative, uses (number of CPUs + njobs). Default: 1",
-        default=1,
+        help="Number of jobs to use for read processing and input BAM decompression. If negative, uses (number of CPUs + njobs). Default: -1",
+        default=-1,
         type=int,
     )
     parser.add_argument(

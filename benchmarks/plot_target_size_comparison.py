@@ -74,7 +74,7 @@ def benchmark_instance(workdir, bam, target_size, instance, repeats):
     bed = make_bed(workdir, instance, target_size)
     new_path = workdir / f"new_target_size_{target_size}_{instance}.tsv"
     old_path = workdir / f"old_target_size_{target_size}_{instance}.tsv"
-    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"})
+    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"}, njobs=1)
 
     def run_new():
         new.run(str(bam), str(new_path), verbose_output=True)

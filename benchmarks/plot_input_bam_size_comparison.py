@@ -72,7 +72,7 @@ def output_lines(path):
 
 def benchmark_instance(workdir, read_pairs, instance, repeats, target_size):
     bed, bam = make_inputs(workdir, read_pairs, instance, target_size)
-    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"})
+    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"}, njobs=1)
 
     def run_new():
         new.run(

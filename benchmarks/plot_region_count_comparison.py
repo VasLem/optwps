@@ -80,7 +80,7 @@ def benchmark_instance(workdir, bam, region_count, instance, repeats, target_siz
     bed = make_bed(workdir, instance, region_count, target_size)
     new_path = workdir / f"new_regions_{region_count}_{instance}.tsv"
     old_path = workdir / f"old_regions_{region_count}_{instance}.tsv"
-    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"})
+    new = WPS(bed_file=str(bed), protection_size=120, valid_chroms={"1"}, njobs=1)
 
     def run_new():
         new.run(str(bam), str(new_path), verbose_output=True)
