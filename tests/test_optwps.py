@@ -534,3 +534,82 @@ def test_parallel_bias_correction_matches_serial(
     )
 
     assert _read_verbose_wps(parallel_output) == _read_verbose_wps(serial_output)
+
+
+def test_wps_bias_regularization_parameters_configure_weights_calculator():
+    from optwps import WPS
+
+    wps = WPS(
+        correct_for_bias=True,
+        bias_prior_count=13.0,
+        bias_min_weight=None,
+        bias_max_weight=4.0,
+    )
+
+    assert wps.weights_calculator.prior_count == 13.0
+    assert wps.weights_calculator.min_weight is None
+    assert wps.weights_calculator.max_weight == 4.0
+
+
+def test_cli_passes_bias_regularization_args(monkeypatch):
+    import optwps.optwps as optwps_module
+
+    calls = {}
+
+    class FakeWPS:
+        def __init__(self, **kwargs):
+            calls["init"] = kwargs
+
+        def run(self, **kwargs):
+            calls["run"] = kwargs
+
+    monkeypatch.setattr(optwps_module, "WPS", FakeWPS)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "optwps",
+            "-i",
+            "input.bam",
+            "-o",
+            "output.tsv",
+            "--correct-for-bias",
+            "--bias-bins",
+            "7",
+            "--bias-subsample",
+            "1.0",
+            "--bias-prior-count",
+            "13.0",
+            "--bias-min-weight",
+            "-1",
+            "--bias-max-weight",
+            "4.0",
+            "--valid-chroms",
+            "canonical",
+            "--downsample",
+            "0.5",
+            "--compute-coverage",
+            "--verbose-output",
+            "--add-header",
+        ],
+    )
+
+    optwps_module.main()
+
+    assert calls["init"]["correct_for_bias"] is True
+    assert calls["init"]["bias_bins"] == 7
+    assert calls["init"]["bias_subsample"] == 1.0
+    assert calls["init"]["bias_prior_count"] == 13.0
+    assert calls["init"]["bias_min_weight"] is None
+    assert calls["init"]["bias_max_weight"] == 4.0
+    assert calls["init"]["valid_chroms"] == [str(i) for i in range(1, 23)] + [
+        "X",
+        "Y",
+    ]
+    assert calls["run"] == {
+        "bamfile": "input.bam",
+        "out_filepath": "output.tsv",
+        "downsample_ratio": 0.5,
+        "compute_coverage": True,
+        "verbose_output": True,
+        "add_header": True,
+    }
