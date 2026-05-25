@@ -29,6 +29,9 @@ class WeightsCalculator:
         min_insert_size=None,
         max_insert_size=None,
         min_mappability_threshold=0.9,
+        prior_count=20.0,
+        min_weight=0.2,
+        max_weight=5.0,
         njobs=1,
         read_buffer_size=10000,
     ):
@@ -38,6 +41,9 @@ class WeightsCalculator:
         self.min_insert_size = min_insert_size
         self.max_insert_size = max_insert_size
         self.min_mappability_threshold = min_mappability_threshold
+        self.prior_count = prior_count
+        self.min_weight = min_weight
+        self.max_weight = max_weight
         self.njobs = joblib.cpu_count() + njobs if njobs < 0 else njobs
         self.njobs = max(1, self.njobs)
         self.read_buffer_size = read_buffer_size
@@ -81,7 +87,16 @@ class WeightsCalculator:
         histogram, bin_edges = np.histogramdd(np.array(features), bins=self.nbins)
         self.weights = np.ones_like(histogram, dtype=float)
         observed = histogram > 0
-        self.weights[observed] = np.mean(histogram[observed]) / histogram[observed]
+        mean_count = np.mean(histogram[observed])
+        self.weights[observed] = (mean_count + self.prior_count) / (
+            histogram[observed] + self.prior_count
+        )
+        if self.min_weight is not None or self.max_weight is not None:
+            self.weights[observed] = np.clip(
+                self.weights[observed],
+                -np.inf if self.min_weight is None else self.min_weight,
+                np.inf if self.max_weight is None else self.max_weight,
+            )
         self.bin_edges = bin_edges
         return self
 

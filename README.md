@@ -87,6 +87,9 @@ optwps \
 - `--correct-for-bias`: Apply fragment length and GC-content bias correction weights to the outside and inside WPS counts
 - `--bias-bins`: Number of bins per feature for bias-correction weights (default: 10)
 - `--bias-subsample`: Fraction of reads used to estimate bias-correction weights (default: 0.05)
+- `--bias-prior-count`: Pseudocount used to shrink rare-bin bias weights (default: 20.0)
+- `--bias-min-weight`: Minimum fragment bias weight. Use a negative value to disable (default: 0.2)
+- `--bias-max-weight`: Maximum fragment bias weight. Use a negative value to disable (default: 5.0)
 - `--downsample`: Ratio to downsample reads (optional)
 - `--chunk-size`: Chunk size for processing in pieces (default: 1e8)
 - `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
@@ -170,7 +173,7 @@ The Windowed Protection Score [![DOI](https://img.shields.io/badge/DOI-110.1016%
    - **Inside score**: Count fragment endpoints that fall inside the protection window.
    - **WPS**: Subtract inside from outside: `WPS = outside - inside`.
 
-5. **Optional bias correction**: With `--correct-for-bias`, `optwps` estimates inverse-frequency weights from a subsample of valid reads. The current features are fragment length and read GC content, binned with `--bias-bins`; the subsample size is controlled by `--bias-subsample`. During WPS calculation, each fragment contributes its weight instead of `1` to both outside and inside counts, so:
+5. **Optional bias correction**: With `--correct-for-bias`, `optwps` estimates inverse-frequency weights from a subsample of valid reads. The current features are fragment length and read GC content, binned with `--bias-bins`; the subsample size is controlled by `--bias-subsample`. Rare bins are stabilized with `--bias-prior-count` and bounded by `--bias-min-weight` / `--bias-max-weight`, so sparse fragment classes cannot dominate the corrected WPS. During WPS calculation, each fragment contributes its weight instead of `1` to both outside and inside counts, so:
 
    `corrected WPS = weighted outside - weighted inside`
 

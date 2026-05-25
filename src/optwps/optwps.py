@@ -208,6 +208,15 @@ class WPS:
             Default: 10
         bias_subsample (float, optional): Fraction of reads used to estimate bias-correction weights.
             Default: 0.05
+        bias_prior_count (float, optional): Pseudocount used to shrink rare-bin
+            bias weights.
+            Default: 20.0
+        bias_min_weight (float, optional): Minimum fragment bias weight. Use None
+            to disable.
+            Default: 0.2
+        bias_max_weight (float, optional): Maximum fragment bias weight. Use None
+            to disable.
+            Default: 5.0
         valid_chroms (set, optional): Set of valid chromosome names to process.
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
@@ -255,6 +264,9 @@ class WPS:
         correct_for_bias=False,
         bias_bins=10,
         bias_subsample=0.05,
+        bias_prior_count=20.0,
+        bias_min_weight=0.2,
+        bias_max_weight=5.0,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
         njobs=1,
@@ -293,6 +305,9 @@ class WPS:
                 min_insert_size=self.min_insert_size,
                 max_insert_size=self.max_insert_size,
                 min_mappability_threshold=self.min_mappability,
+                prior_count=bias_prior_count,
+                min_weight=bias_min_weight,
+                max_weight=bias_max_weight,
                 njobs=self.njobs,
                 read_buffer_size=self.read_buffer_size,
             )
@@ -644,6 +659,33 @@ def main():
         type=float,
     )
     parser.add_argument(
+        "--bias-prior-count",
+        dest="bias_prior_count",
+        help="Pseudocount used to shrink rare-bin bias weights (default: 20.0)",
+        default=20.0,
+        type=float,
+    )
+    parser.add_argument(
+        "--bias-min-weight",
+        dest="bias_min_weight",
+        help=(
+            "Minimum fragment bias weight. Use a negative value to disable "
+            "(default: 0.2)"
+        ),
+        default=0.2,
+        type=float,
+    )
+    parser.add_argument(
+        "--bias-max-weight",
+        dest="bias_max_weight",
+        help=(
+            "Maximum fragment bias weight. Use a negative value to disable "
+            "(default: 5.0)"
+        ),
+        default=5.0,
+        type=float,
+    )
+    parser.add_argument(
         "--downsample",
         dest="downsample",
         help="Ratio to down sample reads (default OFF)",
@@ -712,6 +754,9 @@ def main():
         correct_for_bias=args.correct_for_bias,
         bias_bins=args.bias_bins,
         bias_subsample=args.bias_subsample,
+        bias_prior_count=args.bias_prior_count,
+        bias_min_weight=None if args.bias_min_weight < 0 else args.bias_min_weight,
+        bias_max_weight=None if args.bias_max_weight < 0 else args.bias_max_weight,
         chunk_size=args.chunk_size,
         valid_chroms=valid_chroms,
         njobs=args.njobs,

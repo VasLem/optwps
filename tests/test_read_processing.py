@@ -10,6 +10,7 @@ from optwps.read_processing import (
     valid_read_info,
     weight_from_features,
 )
+from optwps.weighting import WeightsCalculator
 
 
 def _read(**kwargs):
@@ -117,3 +118,35 @@ def test_collectors_and_weight_lookup():
     assert features[0][1] == pytest.approx(4 / 6)
     assert (starts, ends, weights) == ([10], [209], [2.0])
     assert weight_from_features(features[0], None, None) == 1.0
+
+
+def test_bias_weights_shrink_and_clip_rare_bins():
+    class Bam:
+        def __init__(self, reads):
+            self.reads = reads
+
+        def fetch(self):
+            return iter(self.reads)
+
+    common = [
+        _read(template_length=160, query_sequence="ACGT" * 25) for _ in range(100)
+    ]
+    rare = [_read(template_length=120, query_sequence="G" * 100)]
+    bam = Bam(common + rare)
+
+    unregularized = WeightsCalculator(
+        nbins=2,
+        subsample=1.0,
+        prior_count=0.0,
+        min_weight=None,
+        max_weight=None,
+    ).fit(bam)
+    regularized = WeightsCalculator(nbins=2, subsample=1.0).fit(bam)
+
+    rare_features = [120, 1.0]
+    unregularized_rare = unregularized.transform_features(rare_features)
+    regularized_rare = regularized.transform_features(rare_features)
+
+    assert unregularized_rare > 10
+    assert regularized_rare <= 5.0
+    assert regularized_rare < unregularized_rare
