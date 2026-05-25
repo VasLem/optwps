@@ -389,6 +389,55 @@ def _read_verbose_wps(path):
     return rows
 
 
+def _make_mappability_bigwig(path, bamfile, low_chroms=None):
+    import pyBigWig
+
+    low_chroms = set(low_chroms or [])
+    with pysam.AlignmentFile(bamfile, "rb") as bam:
+        chroms = list(bam.references)
+        lengths = list(bam.lengths)
+
+    bigwig = pyBigWig.open(str(path), "w")
+    bigwig.addHeader(list(zip(chroms, lengths)))
+    for chrom, length in zip(chroms, lengths):
+        value = 0.0 if chrom in low_chroms else 1.0
+        bigwig.addEntries([chrom], [0], ends=[length], values=[value])
+    bigwig.close()
+    return path
+
+
+def test_mappability_bigwig_filters_low_mappability_reads(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    mappability_file = _make_mappability_bigwig(
+        tmp_path / "mappability.bw",
+        make_test_bam_file_paired,
+        low_chroms={"chr1"},
+    )
+    output = str(tmp_path / "mappability_filtered.tsv")
+    WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2"]),
+        mappability_file=str(mappability_file),
+        min_mappability=0.9,
+    ).run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=output,
+        verbose_output=True,
+    )
+
+    rows = _read_verbose_wps(output)
+    chr1_rows = [row for row in rows if row[0] == "1"]
+    chr2_rows = [row for row in rows if row[0] == "2"]
+
+    assert chr1_rows
+    assert all(row[3:] == (0.0, 0.0, 0.0) for row in chr1_rows)
+    assert any(row[3:] != (0.0, 0.0, 0.0) for row in chr2_rows)
+
+
 def test_bias_weights_are_applied_to_inside_and_outside_counts(
     make_test_bed_file, make_test_bam_file_paired, tmp_path
 ):
