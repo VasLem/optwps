@@ -3,3 +3,6 @@ numpy
 bx-python
 pytest
 tqdm
+joblib
+pandas
+pyBigWig

@@ -42,12 +42,13 @@ Note:
 import os
 import sys
 import pysam
-import random
 import numpy as np
 import pandas as pd
 import joblib
 
-from optwps.utils import exopen, is_soft_clipped, ref_aln_length
+from .read_validator import ReadValidator
+from .weighting import WeightsCalculator
+from .utils import exopen, ref_aln_length
 from tqdm.auto import tqdm
 
 
@@ -176,6 +177,8 @@ class WPS:
     Args:
         bed_file (str, optional): Path to BED file with regions to process.
             If None, processes entire genome. Default: None
+        mappability_file (str, optional): Path to BigWig file with mappability scores.
+            If None, bam will be processed without mappability filtering.
         protection_size (int, optional): Total protection window size in base pairs.
             This value is divided by 2 to get the window on each side of the position.
             Default: 120
@@ -183,6 +186,14 @@ class WPS:
             If None, no minimum filter applied. Default: None
         max_insert_size (int, optional): Maximum insert/fragment size to include.
             If None, no maximum filter applied. Default: None
+        min_mappability (float, optional): Minimum average mappability score for fragments to include.
+            If None, no mappability filter applied. Default: 0.9
+        correct_for_bias (bool, optional): Whether to apply bias correction weights based on fragment features (length, GC content).
+            Default: False
+        bias_bins (int, optional): Number of bins used for each bias-correction feature.
+            Default: 10
+        bias_subsample (float, optional): Fraction of reads used to estimate bias-correction weights.
+            Default: 0.05
         valid_chroms (set, optional): Set of valid chromosome names to process.
             Default: chromosomes 1-22, X, Y
         chunk_size (float, optional): Region chunk size for processing.
@@ -196,8 +207,11 @@ class WPS:
         valid_chroms (set): Set of valid chromosome names
         min_insert_size (int): Minimum fragment size filter
         max_insert_size (int): Maximum fragment size filter
+        min_mappability (float): Minimum mappability score filter
         chunk_size (float): Chunk size for processing
         roi_generator (ROIGenerator): Region generator instance
+        read_validator (ReadValidator): Read validator instance
+        weights_calculator (WeightsCalculator or None): Weights calculator instance for bias correction
 
     Example:
         >>> wps = WPS(protection_size=120, min_insert_size=120, max_insert_size=180)
@@ -216,14 +230,20 @@ class WPS:
     def __init__(
         self,
         bed_file=None,
+        mappability_file=None,
         protection_size=120,
         min_insert_size=None,
         max_insert_size=None,
+        min_mappability=0.9,
+        correct_for_bias=False,
+        bias_bins=10,
+        bias_subsample=0.05,
         valid_chroms=set(map(str, list(range(1, 23)) + ["X", "Y"])),
         chunk_size=1e8,
         njobs=1,
     ):
         self.bed_file = bed_file
+        self.mappability_file = mappability_file
         self.protection_size = protection_size // 2
         if valid_chroms is not None:
             self.valid_chroms = [x.replace("chr", "") for x in valid_chroms]
@@ -231,11 +251,32 @@ class WPS:
             self.valid_chroms = None
         self.min_insert_size = min_insert_size
         self.max_insert_size = max_insert_size
+        self.min_mappability = min_mappability
         self.chunk_size = chunk_size
         self.njobs = njobs
         if self.njobs < 0:
             self.njobs = joblib.cpu_count() + self.njobs
-        self.roi_generator = ROIGenerator(bed_file=self.bed_file)
+        self.roi_generator = ROIGenerator(
+            bed_file=self.bed_file, chunk_size=self.chunk_size
+        )
+        self.read_validator = ReadValidator(
+            min_insert_size=self.min_insert_size,
+            max_insert_size=self.max_insert_size,
+            mappability_file=self.mappability_file,
+            min_mappability_threshold=self.min_mappability,
+        )
+        self.weights_calculator = (
+            WeightsCalculator(
+                mappability_file=self.mappability_file,
+                nbins=bias_bins,
+                subsample=bias_subsample,
+                min_insert_size=self.min_insert_size,
+                max_insert_size=self.max_insert_size,
+                min_mappability_threshold=self.min_mappability,
+            )
+            if correct_for_bias
+            else None
+        )
 
     def __call__(self, *args, **kwargs):
         return self.run(*args, **kwargs)
@@ -312,6 +353,9 @@ class WPS:
             except AttributeError:
                 pass
 
+        if self.weights_calculator is not None:
+            self.weights_calculator.fit(input_file)
+
         for chrom, start, end, region_id in self.roi_generator.regions(
             bam_file=bamfile
         ):
@@ -326,91 +370,69 @@ class WPS:
 
             starts = []
             ends = []
+            weights = []
             for read in input_file.fetch(
                 prefix + chrom,
                 max(0, regionStart - self.protection_size - 1),
                 regionEnd + self.protection_size + 1,
             ):
-                if read.is_duplicate or read.is_qcfail or read.is_unmapped:
-                    continue
-                if is_soft_clipped(read.cigartuples):
+
+                if not self.read_validator.valid_read(
+                    read,
+                    upstream_limit=regionStart - self.protection_size - 1,
+                    downsample_ratio=downsample_ratio,
+                ):
                     continue
 
                 if read.is_paired:
-                    if read.mate_is_unmapped:
-                        continue
-                    if read.rnext != read.tid:
-                        continue
-                    if read.is_read1 or (
-                        read.is_read2
-                        and read.pnext + read.qlen
-                        < regionStart - self.protection_size - 1
-                    ):
-                        if read.isize == 0:
-                            continue
-                        if (
-                            downsample_ratio is not None
-                            and random.random() >= downsample_ratio
-                        ):
-                            continue
-                        lseq = abs(read.isize)
-                        if (
-                            self.min_insert_size is not None
-                            and lseq < self.min_insert_size
-                        ):
-                            continue
-                        if (
-                            self.max_insert_size is not None
-                            and lseq > self.max_insert_size
-                        ):
-                            continue
-                        rstart = min(read.pos, read.pnext)
-                        rend = rstart + lseq - 1
-                        starts.append(rstart)
-                        ends.append(rend)
+                    lseq = abs(read.isize)
+                    rstart = min(read.pos, read.pnext)
+                    rend = rstart + lseq - 1
+                    starts.append(rstart)
+                    ends.append(rend)
                 else:
-                    if (
-                        downsample_ratio is not None
-                        and random.random() >= downsample_ratio
-                    ):
-                        continue
                     rstart = read.pos
                     lseq = ref_aln_length(read.cigartuples)
-                    if self.min_insert_size is not None and (
-                        (lseq < self.min_insert_size) or (lseq > self.max_insert_size)
-                    ):
-                        continue
                     rend = rstart + lseq - 1  # end included
                     starts.append(rstart)
                     ends.append(rend)
+                if self.weights_calculator is not None:
+                    weight = self.weights_calculator.transform(read)
+                    weights.append(weight)
             n = regionEnd - regionStart + 1
             if len(starts) > 0:
                 starts = np.array(starts)
                 ends = np.array(ends)
+                read_weights = (
+                    np.array(weights, dtype=float)
+                    if self.weights_calculator is not None
+                    else None
+                )
+                score_dtype = float if read_weights is not None else int
                 # Fragments fully spanning the window boundaries
                 span_start = starts + self.protection_size - regionStart
                 span_end = ends - self.protection_size - regionStart + 2
                 valid = span_end >= span_start
-                outside = np.zeros(n + 2, dtype=int)
+                outside = np.zeros(n + 2, dtype=score_dtype)
                 np.add.at(
                     outside,
                     np.clip(span_start[valid] + 1, 0, n + 1),
-                    1,
+                    1 if read_weights is None else read_weights[valid],
                 )
                 np.add.at(
                     outside,
                     np.clip(span_end[valid], 0, n + 1),
-                    -1,
+                    -1 if read_weights is None else -read_weights[valid],
                 )
                 np.add.at(
                     outside,
                     np.clip(span_start[~valid] + 1, 0, n + 1),
-                    -1,
+                    -1 if read_weights is None else -read_weights[~valid],
                 )
                 np.add.at(
                     outside,
                     np.clip(span_end[~valid], 0, n + 1),
-                    1,
+                    1 if read_weights is None else read_weights[~valid],
                 )
 
                 outside_cum = np.cumsum(outside)[:-2]
@@ -419,9 +441,18 @@ class WPS:
                 all_ends = np.concatenate([starts, ends]) - regionStart
                 left = np.clip(all_ends - self.protection_size + 2, 0, n + 1)
                 right = np.clip(all_ends + self.protection_size + 1, 0, n + 1)
-                inside = np.zeros(n + 2, dtype=int)
-                np.add.at(inside, left, 1)
-                np.add.at(inside, right, -1)
+                inside = np.zeros(n + 2, dtype=score_dtype)
+                endpoint_weights = (
+                    1
+                    if read_weights is None
+                    else np.concatenate([read_weights, read_weights])
+                )
+                np.add.at(inside, left, endpoint_weights)
+                np.add.at(
+                    inside,
+                    right,
+                    -1 if read_weights is None else -endpoint_weights,
+                )
                 inside_cum = np.cumsum(inside)[:-2]
 
                 wps = outside_cum - inside_cum
@@ -440,9 +471,10 @@ class WPS:
                     )
                     coverage = np.cumsum(coverage)[:-1]
             else:
-                outside_cum = np.zeros(n, dtype=int)
-                inside_cum = np.zeros(n, dtype=int)
-                wps = np.zeros(n, dtype=int)
+                score_dtype = float if self.weights_calculator is not None else int
+                outside_cum = np.zeros(n, dtype=score_dtype)
+                inside_cum = np.zeros(n, dtype=score_dtype)
+                wps = np.zeros(n, dtype=score_dtype)
                 coverage = None
                 if compute_coverage:
                     coverage = np.zeros(n, dtype=int)
@@ -529,9 +561,42 @@ def main():
     parser.add_argument(
         "--max-insert-size",
         dest="max_insert_size",
-        help="Minimum read length threshold to consider (Optional)",
+        help="Maximum read length threshold to consider (Optional)",
         default=None,
         type=int,
+    )
+    parser.add_argument(
+        "--mappability-file",
+        dest="mappability_file",
+        help="BigWig file with mappability scores used to filter fragments (optional)",
+        default=None,
+    )
+    parser.add_argument(
+        "--min-mappability",
+        dest="min_mappability",
+        help="Minimum average mappability score for fragments when --mappability-file is provided (default: 0.9)",
+        default=0.9,
+        type=float,
+    )
+    parser.add_argument(
+        "--correct-for-bias",
+        dest="correct_for_bias",
+        help="Apply fragment length and GC-content bias correction weights to WPS counts.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--bias-bins",
+        dest="bias_bins",
+        help="Number of bins per feature for bias-correction weights (default: 10)",
+        default=10,
+        type=int,
+    )
+    parser.add_argument(
+        "--bias-subsample",
+        dest="bias_subsample",
+        help="Fraction of reads used to estimate bias-correction weights (default: 0.05)",
+        default=0.05,
+        type=float,
     )
     parser.add_argument(
         "--downsample",
@@ -590,6 +655,11 @@ def main():
         protection_size=args.protection,
         min_insert_size=args.min_insert_size,
         max_insert_size=args.max_insert_size,
+        mappability_file=args.mappability_file,
+        min_mappability=args.min_mappability,
+        correct_for_bias=args.correct_for_bias,
+        bias_bins=args.bias_bins,
+        bias_subsample=args.bias_subsample,
         chunk_size=args.chunk_size,
         valid_chroms=valid_chroms,
         njobs=args.njobs,

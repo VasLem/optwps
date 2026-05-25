@@ -1,4 +1,5 @@
 import pysam
+import pytest
 
 from optwps import exopen, is_soft_clipped, ref_aln_length
 from bx.intervals import Intersecter, Interval
@@ -351,3 +352,90 @@ def test_with_header(make_test_bed_file, make_test_bam_file_paired, tmp_path, ca
     )
     contents = open(tmp_output, "r").read()
     assert contents.startswith("#chrom\tstart\tend\twps\n")
+
+
+def _read_verbose_wps(path):
+    rows = []
+    with open(path) as handle:
+        for line in handle:
+            chrom, start, end, outside, inside, wps = line.strip().split("\t")
+            rows.append(
+                (
+                    chrom,
+                    int(start),
+                    int(end),
+                    float(outside),
+                    float(inside),
+                    float(wps),
+                )
+            )
+    return rows
+
+
+def test_bias_weights_are_applied_to_inside_and_outside_counts(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    class FixedWeights:
+        def fit(self, bam):
+            return self
+
+        def transform(self, read):
+            return 2.5
+
+    valid_chroms = set(["1", "2", "X", "3", "4", "5"])
+    unweighted = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=valid_chroms,
+    )
+    weighted = WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=valid_chroms,
+    )
+    weighted.weights_calculator = FixedWeights()
+
+    unweighted_output = str(tmp_path / "unweighted.tsv")
+    weighted_output = str(tmp_path / "weighted.tsv")
+    unweighted.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=unweighted_output,
+        verbose_output=True,
+    )
+    weighted.run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=weighted_output,
+        verbose_output=True,
+    )
+
+    for plain, corrected in zip(
+        _read_verbose_wps(unweighted_output), _read_verbose_wps(weighted_output)
+    ):
+        assert corrected[:3] == plain[:3]
+        assert corrected[3] == pytest.approx(plain[3] * 2.5)
+        assert corrected[4] == pytest.approx(plain[4] * 2.5)
+        assert corrected[5] == pytest.approx(plain[5] * 2.5)
+
+
+def test_bias_correction_runs_with_estimated_weights(
+    make_test_bed_file, make_test_bam_file_paired, tmp_path
+):
+    from optwps import WPS
+
+    output = str(tmp_path / "bias_corrected.tsv")
+    WPS(
+        bed_file=str(make_test_bed_file),
+        protection_size=120,
+        valid_chroms=set(["1", "2", "X", "3", "4", "5"]),
+        correct_for_bias=True,
+        bias_bins=2,
+        bias_subsample=1.0,
+    ).run(
+        bamfile=str(make_test_bam_file_paired),
+        out_filepath=output,
+        verbose_output=True,
+    )
+
+    assert len(_read_verbose_wps(output)) > 0

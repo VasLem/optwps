@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.7"
 license = {text = "BSD"}
 authors = [
-    {name = "Vasileios Lemonidis", email = "vaslemonidis@hotmail.com"},
+    {name = "Vasileios Lemonidis", email = "vasileios.lemonidis@kuleuven.be"},
 ]
 maintainers = [
-    {name = "Vasileios Lemonidis", email = "vaslemonidis@hotmail.com"},
+    {name = "Vasileios Lemonidis", email = "vasileios.lemonidis@kuleuven.be"},
 ]
 keywords = [
     "bioinformatics",
@@ -40,10 +40,12 @@ classifiers = [
 ]
 dependencies = [
     "pysam",
+    "numpy",
     "bx-python",
     "tqdm",
     "joblib",
     "pandas",
+    "pyBigWig",
 ]
 
 [project.optional-dependencies]

@@ -5,11 +5,7 @@
 [![codecov](https://codecov.io/gh/VasLem/optwps/branch/master/graph/badge.svg)](https://codecov.io/gh/VasLem/optwps)
 [![DOI](https://zenodo.org/badge/1092793606.svg)](https://doi.org/10.5281/zenodo.17566994)
 
-A high-performance Python package for computing Window Protection Score (WPS) from BAM files, designed for cell-free DNA (cfDNA) analysis. It was built as a direct alternative of a script provided by the [Kircher Lab](https://github.com/kircherlab/cfDNA.git), and has been tested to replicate the exact numbers.
-
-## Overview
-
-`optwps` is a fast and efficient tool for calculating Window Protection Scores from aligned sequencing reads. WPS is a metric used in cell-free DNA analysis to identify nucleosome positioning and protected regions by analyzing fragment coverage patterns.
+A high-performance Python package for computing Window Protection Score (WPS) from BAM files, designed for cell-free DNA (cfDNA) analysis. It was built as a direct alternative of a script provided by the [Kircher Lab](https://github.com/kircherlab/cfDNA.git), and has been tested to replicate the exact numbers. We also optionally extend WPS, to account for GC and fragment size bias, using a histogram-based binning approach, while also allowing mappability-based hard-threshold filtering.
 
 ## Performance
 
@@ -43,6 +39,7 @@ pip install optwps
 
 - Python >= 3.7
 - samtools
+- Python package dependencies are installed automatically by `pip`, including `pysam`, `numpy`, `pandas`, and `pyBigWig`.
 
 ## Usage
 
@@ -66,6 +63,17 @@ optwps \
     --downsample 0.5
 ```
 
+With mappability filtering and bias correction:
+
+```bash
+optwps \
+    -i input.bam \
+    -o output.tsv \
+    --mappability-file hg38_mappability.bw \
+    --min-mappability 0.9 \
+    --correct-for-bias
+```
+
 ### Command Line Arguments
 
 - `-i, --input`: Input BAM file (required)
@@ -74,6 +82,11 @@ optwps \
 - `-w, --protection`: Base pair protection window (default: 120)
 - `--min-insert-size`: Minimum read length threshold to consider (optional)
 - `--max-insert-size`: Maximum read length threshold to consider (optional)
+- `--mappability-file`: BigWig file with mappability scores used to filter fragments (optional)
+- `--min-mappability`: Minimum average mappability score for fragments when `--mappability-file` is provided (default: 0.9)
+- `--correct-for-bias`: Apply fragment length and GC-content bias correction weights to the outside and inside WPS counts
+- `--bias-bins`: Number of bins per feature for bias-correction weights (default: 10)
+- `--bias-subsample`: Fraction of reads used to estimate bias-correction weights (default: 0.05)
 - `--downsample`: Ratio to downsample reads (optional)
 - `--chunk-size`: Chunk size for processing in pieces (default: 1e8)
 - `--valid-chroms`: Comma-separated list of valid chromosomes to include (e.g., '1,2,3,X,Y') or 'canonical' for chromosomes 1-22, X, Y (optional)
@@ -91,6 +104,9 @@ wps_calculator = WPS(
     protection_size=120,
     min_insert_size=120,
     max_insert_size=180,
+    mappability_file='hg38_mappability.bw',
+    min_mappability=0.9,
+    correct_for_bias=True,
     valid_chroms=set(map(str, list(range(1, 23)) + ['X', 'Y']))
 )
 
@@ -113,6 +129,8 @@ The output is a tab-separated no-header (unless `--add-header` is specified) fil
     - Count of fragments spanning the protection window (if `--verbose-output`)
     - Count of fragment endpoints in protection window (if `--verbose-output`)
     - Window Protection Score (outside - inside)
+
+When `--correct-for-bias` is used, the outside, inside, and WPS values are weighted and may be floating-point values.
 
 Example output:
 
@@ -139,18 +157,26 @@ With `--verbose-output`:
 
 ## Algorithm
 
-The Windowed Protection Score [![DOI](https://img.shields.io/badge/DOI-110.1016%2Fj.cell.2015.11.050-blue?style=flat-square)](https://doi.org/10.1016/j.cell.2015.11.050) algorithm has the following steps:
+The Windowed Protection Score [![DOI](https://img.shields.io/badge/DOI-110.1016%2Fj.cell.2015.11.050-blue?style=flat-square)](https://doi.org/10.1016/j.cell.2015.11.050) algorithm counts how cfDNA fragments relate to a fixed protection window around each genomic position. `optwps` implements the original score and optionally extends it with mappability filtering and fragment-bias correction.
 
-1. **Fragment Collection**: For each genomic position, collect all DNA fragments (paired-end reads or single reads) in the region
+1. **Region and fragment collection**: For each BED interval, or for chunked whole-genome regions when no BED file is provided, `optwps` fetches overlapping BAM reads and converts them to fragments. Paired-end reads use the inferred template coordinates; single-end reads use the aligned reference length.
 
-2. **Protection Window**: Define a protection window of size `protection_size` (default 120bp, or ±60bp from the center)
+2. **Read filtering**: Duplicate, QC-failed, unmapped, soft-clipped, discordant paired-end, zero-length, and out-of-range insert-size fragments are skipped. When `--mappability-file` is provided, each fragment must also have an average BigWig mappability score of at least `--min-mappability`.
 
-3. **Score Calculation**:
-   - **Outside Score**: Count fragments that completely span the protection window
-   - **Inside Score**: Count fragment endpoints that fall within the protection window (exclusive boundaries)
-   - **WPS**: Subtract inside score from outside score: `WPS = outside - inside`
+3. **Protection window**: For each genomic position, define a centered window of size `protection_size` (default 120 bp, or +/-60 bp from the center).
 
-4. **Interpretation**: Positive WPS values indicate protected regions (likely nucleosome-bound), while negative values suggest accessible regions
+4. **Uncorrected score calculation**:
+   - **Outside score**: Count fragments that completely span the protection window.
+   - **Inside score**: Count fragment endpoints that fall inside the protection window.
+   - **WPS**: Subtract inside from outside: `WPS = outside - inside`.
+
+5. **Optional bias correction**: With `--correct-for-bias`, `optwps` estimates inverse-frequency weights from a subsample of valid reads. The current features are fragment length and read GC content, binned with `--bias-bins`; the subsample size is controlled by `--bias-subsample`. During WPS calculation, each fragment contributes its weight instead of `1` to both outside and inside counts, so:
+
+   `corrected WPS = weighted outside - weighted inside`
+
+   Bias-corrected `outside`, `inside`, and `wps` values can therefore be floating-point values.
+
+6. **Interpretation**: Positive WPS values indicate protected regions, often consistent with nucleosome-bound DNA, while negative values suggest more accessible regions.
 
 
 ## Examples
@@ -167,8 +193,8 @@ optwps -i sample.bam -o sample_wps.tsv
 optwps \
     -i sample.bam \
     -r regions.tsv \
-    --min_insert_size 120 \
-    --max_insert_size 180
+    --min-insert-size 120 \
+    --max-insert-size 180
 ```
 
 ### Example 3: Specific Regions with Downsampling
@@ -193,6 +219,17 @@ optwps \
 ```bash
 optwps \
     -i sample.bam \
-    --compute_coverage \
+    --compute-coverage \
     -o "wps.tsv"
+```
+
+### Example 6: Bias-corrected WPS
+
+```bash
+optwps \
+    -i sample.bam \
+    -o sample_bias_corrected_wps.tsv \
+    --correct-for-bias \
+    --bias-bins 10 \
+    --bias-subsample 0.05
 ```
